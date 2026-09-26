@@ -5,12 +5,19 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 
 local localPlayer = Players.LocalPlayer
+local playerGui = localPlayer:WaitForChild("PlayerGui")
 local camera = workspace.CurrentCamera
 
 -- Configuration
 local RAINBOW_SPEED = 0.2 
 local FOV_RADIUS = 150 
 local COOLDOWN_DURATION = 2.0 
+
+-- ANTI-DUPLICATE GUARD: Instantly deletes any glitched existing UI instances
+local existingGui = playerGui:FindFirstChild("QuantumCamlockGui")
+if existingGui then 
+	existingGui:Destroy() 
+end
 
 -- State Configurations
 local locked = false
@@ -26,27 +33,28 @@ local targetPartName = "Head"
 local fovEnabled = true 
 local autolockCooldownActive = false 
 
--- Create Premium UI Setup
+-- Create Unified Core GUI ScreenGui Container
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "QuantumCamlockGui"
-screenGui.ResetOnSpawn = false
-screenGui.Parent = localPlayer:WaitForChild("PlayerGui")
+screenGui.ResetOnSpawn = false -- Stops duplication stacks on avatar death
+screenGui.Parent = playerGui
 
--- MAIN ANCHOR FRAME
+-- MAIN ANCHOR COORDINATE FRAME
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainAnchor"
 mainFrame.Size = UDim2.new(0, 160, 0, 122) 
 mainFrame.Position = UDim2.new(0.85, -80, 0.55, -61)
-mainFrame.BackgroundTransparency = 1
+mainFrame.BackgroundTransparency = 1 -- Keep wrapper transparent, but contents solid
 mainFrame.Parent = screenGui
 
--- Primary Right Panel Base Card
+-- Primary Right Panel Base Card (FORCED SOLID BACKGROUND FILL)
 local hudBackground = Instance.new("Frame")
 hudBackground.Name = "HUDBackdrop"
 hudBackground.Size = UDim2.new(1, 0, 1, 0)
 hudBackground.Position = UDim2.new(0, 0, 0, 0)
-hudBackground.BackgroundColor3 = Color3.fromRGB(0, 0, 0) 
-hudBackground.BackgroundTransparency = 0 
+hudBackground.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Deep Black Fill
+hudBackground.BackgroundTransparency = 0 -- 100% Solid background visible
+hudBackground.BorderSizePixel = 0
 hudBackground.Parent = mainFrame
 
 local frameCorner = Instance.new("UICorner")
@@ -58,13 +66,14 @@ hudStroke.Thickness = 1.5
 hudStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 hudStroke.Parent = hudBackground
 
--- LEFT SUB-PANEL BASE CARD
+-- LEFT SUB-PANEL BASE CARD (FORCED SOLID BACKGROUND FILL)
 local subPanel = Instance.new("Frame")
 subPanel.Name = "SubPanel"
 subPanel.Size = UDim2.new(1, 0, 1.3, 0) 
-subPanel.Position = UDim2.new(0, 0, -0.15, 0) 
-subPanel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-subPanel.BackgroundTransparency = 0
+subPanel.Position = UDim2.new(0, 0, -0.15, 0) -- Nestles directly behind primary until extended
+subPanel.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Deep Black Fill
+subPanel.BackgroundTransparency = 0 -- 100% Solid background visible
+subPanel.BorderSizePixel = 0
 subPanel.Visible = false
 subPanel.Parent = mainFrame
 
@@ -119,7 +128,7 @@ circleStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 circleStroke.Transparency = 0.4
 circleStroke.Parent = fovCircle
 
--- Tactical Button Construction Engine (Autonomous setup)
+-- Tactical Button Construction Engine
 local function createTacticalButton(name, text, size)
 	local btn = Instance.new("TextButton")
 	btn.Name = name
@@ -185,128 +194,7 @@ wallCheckButton.Parent = subPanel
 local friendCheckButton, stroke7 = createTacticalButton("FriendCheckToggle", "FRIEND CHECK: OFF", UDim2.new(0.92, 0, 0, 24))
 friendCheckButton.Parent = subPanel
 
--- SHARED DRAG HANDLE PAD AT THE BOTTOM (Always available)
-local dragHandleButton = Instance.new("TextButton")
-dragHandleButton.Name = "DragHandle"
-dragHandleButton.Size = UDim2.new(0.9, 0, 0, 22)
-dragHandleButton.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-dragHandleButton.Text = "::: HOLD TO DRAG :::"
-dragHandleButton.TextColor3 = Color3.fromRGB(160, 160, 170)
-dragHandleButton.TextSize = 8
-dragHandleButton.Font = Enum.Font.FredokaOne
-dragHandleButton.AutoButtonColor = false
-dragHandleButton.Parent = hudBackground
-
-local handleCorner = Instance.new("UICorner")
-handleCorner.CornerRadius = UDim.new(0, 6)
-handleCorner.Parent = dragHandleButton
-
-local stroke8 = Instance.new("UIStroke")
-stroke8.Thickness = 1.5
-stroke8.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-stroke8.Parent = dragHandleButton
-
--- Vertical Grid Layout Alignment for Primary Panel
-local uiListLayout = Instance.new("UIListLayout")
-uiListLayout.Padding = UDim.new(0, 5)
-uiListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-uiListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-uiListLayout.Parent = hudBackground
-
--- Vertical Grid Layout Alignment for Left Sub-Panel
-local subListLayout = Instance.new("UIListLayout")
-subListLayout.Padding = UDim.new(0, 4)
-subListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-subListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-subListLayout.Parent = subPanel
-
--- Create Screen FOV Circle Visual Asset
-local fovCircle = Instance.new("Frame")
-fovCircle.Name = "FOVCircle"
-fovCircle.Size = UDim2.new(0, FOV_RADIUS * 2, 0, FOV_RADIUS * 2)
-fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
-fovCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
-fovCircle.BackgroundTransparency = 1
-fovCircle.Visible = fovEnabled
-fovCircle.Parent = screenGui
-
-local circleCorner = Instance.new("UICorner")
-circleCorner.CornerRadius = UDim.new(1, 0) 
-circleCorner.Parent = fovCircle
-
-local circleStroke = Instance.new("UIStroke")
-circleStroke.Thickness = 1.5
-circleStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-circleStroke.Transparency = 0.4
-circleStroke.Parent = fovCircle
-
--- Tactical Button Construction Engine (Autonomous setup)
-local function createTacticalButton(name, text, size)
-	local btn = Instance.new("TextButton")
-	btn.Name = name
-	btn.Size = size
-	btn.BackgroundColor3 = Color3.fromRGB(15, 15, 15) 
-	btn.TextColor3 = Color3.fromRGB(255, 50, 50) 
-	btn.Text = text
-	btn.TextSize = 10
-	btn.Font = Enum.Font.FredokaOne
-	btn.AutoButtonColor = false
-	
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 6)
-	corner.Parent = btn
-	
-	local stroke = Instance.new("UIStroke")
-	stroke.Thickness = 1.5
-	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	stroke.Parent = btn
-	
-	btn.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-			TweenService:Create(btn, TweenInfo.new(0.1), {Size = UDim2.new(size.X.Scale, size.X.Offset - 6, size.Y.Scale, size.Y.Offset - 2)}):Play()
-		end
-	end)
-	btn.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-			TweenService:Create(btn, TweenInfo.new(0.15), {Size = size}):Play()
-		end
-	end)
-	return btn, stroke
-end
-
--- PRIMARY RIGHT UI BUTTON MEMBERS (Always available)
-local textButton, stroke1 = createTacticalButton("LockToggle", "TARGET: UNLOCKED", UDim2.new(0.9, 0, 0, 38))
-textButton.Parent = hudBackground
-
-local switchButton, stroke2 = createTacticalButton("PartSwitch", "AIM: HEAD", UDim2.new(0.95, 0, 0, 30))
-switchButton.TextColor3 = Color3.fromRGB(255, 255, 255) 
-switchButton.Parent = hudBackground
-
--- STANDALONE EXTEND TOGGLE BUTTON
-local extendButton, strokeE = createTacticalButton("ExtendToggle", "[ < ]", UDim2.new(0, 30, 0, 30))
-extendButton.Position = UDim2.new(0, -36, 0.5, -15)
-extendButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-extendButton.Parent = hudBackground
-
--- SUB-PANEL LEFT SIDE BUTTON MEMBERS
-local modeButton, stroke3 = createTacticalButton("ModeToggle", "TARGET: PLAYERS", UDim2.new(0.92, 0, 0, 26))
-modeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-modeButton.Parent = subPanel
-
-local fovToggleButton, stroke4 = createTacticalButton("FovToggle", "FOV: VISIBLE", UDim2.new(0.92, 0, 0, 24))
-fovToggleButton.TextColor3 = Color3.fromRGB(0, 255, 100) 
-fovToggleButton.Parent = subPanel
-
-local autoLockButton, stroke5 = createTacticalButton("AutoLockToggle", "AUTOLOCK: OFF", UDim2.new(0.92, 0, 0, 24))
-autoLockButton.Parent = subPanel
-
-local wallCheckButton, stroke6 = createTacticalButton("WallCheckToggle", "WALL CHECK: OFF", UDim2.new(0.92, 0, 0, 24))
-wallCheckButton.Parent = subPanel
-
-local friendCheckButton, stroke7 = createTacticalButton("FriendCheckToggle", "FRIEND CHECK: OFF", UDim2.new(0.92, 0, 0, 24))
-friendCheckButton.Parent = subPanel
-
--- SHARED DRAG HANDLE PAD AT THE BOTTOM (Always available)
+-- FIXED ALWAYS STABLE DRAG HANDLE AT THE BOTTOM
 local dragHandleButton = Instance.new("TextButton")
 dragHandleButton.Name = "DragHandle"
 dragHandleButton.Size = UDim2.new(0.9, 0, 0, 22)
@@ -366,7 +254,7 @@ local function isFriend(player)
 	return false
 end
 
--- Synchronized Global Rainbow State Rotator
+-- Synchronized Global Rainbow State Rotator (RE-ADDED TO ALL SECTIONS AND FOV)
 local hue = 0
 RunService.RenderStepped:Connect(function(deltaTime)
 	hue = (hue + (deltaTime * RAINBOW_SPEED)) % 1
@@ -374,7 +262,7 @@ RunService.RenderStepped:Connect(function(deltaTime)
 	
 	hudStroke.Color = globalSyncColor
 	subStroke.Color = globalSyncColor
-	circleStroke.Color = globalSyncColor 
+	circleStroke.Color = globalSyncColor -- Circle re-unified under rainbow sync loop
 	stroke1.Color = globalSyncColor
 	stroke2.Color = globalSyncColor
 	strokeE.Color = globalSyncColor
@@ -390,7 +278,7 @@ RunService.RenderStepped:Connect(function(deltaTime)
 	end
 end)
 
--- Dragging Core Engine
+-- Dragging Core Engine (Always stable and operational)
 local dragging, dragInput, dragStart, startPos
 local function update(input)
 	local delta = input.Position - dragStart
@@ -435,10 +323,8 @@ local function getClosestCharacterToCenter()
 			local screenPos, onScreen = camera:WorldToViewportPoint(trackingPart.Position)
 			if onScreen then
 				local distToCenter = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
-				
 				if distToCenter <= FOV_RADIUS then
 					local worldDistance = (trackingPart.Position - camera.CFrame.Position).Magnitude
-					
 					if worldDistance < closestWorldDistance then
 						if isPartVisible(trackingPart) then 
 							closestWorldDistance = worldDistance 
