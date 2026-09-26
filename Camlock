@@ -119,7 +119,128 @@ circleStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 circleStroke.Transparency = 0.4
 circleStroke.Parent = fovCircle
 
--- Tactical Button Construction Engine
+-- Tactical Button Construction Engine (Autonomous setup)
+local function createTacticalButton(name, text, size)
+	local btn = Instance.new("TextButton")
+	btn.Name = name
+	btn.Size = size
+	btn.BackgroundColor3 = Color3.fromRGB(15, 15, 15) 
+	btn.TextColor3 = Color3.fromRGB(255, 50, 50) 
+	btn.Text = text
+	btn.TextSize = 10
+	btn.Font = Enum.Font.FredokaOne
+	btn.AutoButtonColor = false
+	
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 6)
+	corner.Parent = btn
+	
+	local stroke = Instance.new("UIStroke")
+	stroke.Thickness = 1.5
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	stroke.Parent = btn
+	
+	btn.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+			TweenService:Create(btn, TweenInfo.new(0.1), {Size = UDim2.new(size.X.Scale, size.X.Offset - 6, size.Y.Scale, size.Y.Offset - 2)}):Play()
+		end
+	end)
+	btn.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+			TweenService:Create(btn, TweenInfo.new(0.15), {Size = size}):Play()
+		end
+	end)
+	return btn, stroke
+end
+
+-- PRIMARY RIGHT UI BUTTON MEMBERS (Always available)
+local textButton, stroke1 = createTacticalButton("LockToggle", "TARGET: UNLOCKED", UDim2.new(0.9, 0, 0, 38))
+textButton.Parent = hudBackground
+
+local switchButton, stroke2 = createTacticalButton("PartSwitch", "AIM: HEAD", UDim2.new(0.95, 0, 0, 30))
+switchButton.TextColor3 = Color3.fromRGB(255, 255, 255) 
+switchButton.Parent = hudBackground
+
+-- STANDALONE EXTEND TOGGLE BUTTON
+local extendButton, strokeE = createTacticalButton("ExtendToggle", "[ < ]", UDim2.new(0, 30, 0, 30))
+extendButton.Position = UDim2.new(0, -36, 0.5, -15)
+extendButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+extendButton.Parent = hudBackground
+
+-- SUB-PANEL LEFT SIDE BUTTON MEMBERS
+local modeButton, stroke3 = createTacticalButton("ModeToggle", "TARGET: PLAYERS", UDim2.new(0.92, 0, 0, 26))
+modeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+modeButton.Parent = subPanel
+
+local fovToggleButton, stroke4 = createTacticalButton("FovToggle", "FOV: VISIBLE", UDim2.new(0.92, 0, 0, 24))
+fovToggleButton.TextColor3 = Color3.fromRGB(0, 255, 100) 
+fovToggleButton.Parent = subPanel
+
+local autoLockButton, stroke5 = createTacticalButton("AutoLockToggle", "AUTOLOCK: OFF", UDim2.new(0.92, 0, 0, 24))
+autoLockButton.Parent = subPanel
+
+local wallCheckButton, stroke6 = createTacticalButton("WallCheckToggle", "WALL CHECK: OFF", UDim2.new(0.92, 0, 0, 24))
+wallCheckButton.Parent = subPanel
+
+local friendCheckButton, stroke7 = createTacticalButton("FriendCheckToggle", "FRIEND CHECK: OFF", UDim2.new(0.92, 0, 0, 24))
+friendCheckButton.Parent = subPanel
+
+-- SHARED DRAG HANDLE PAD AT THE BOTTOM (Always available)
+local dragHandleButton = Instance.new("TextButton")
+dragHandleButton.Name = "DragHandle"
+dragHandleButton.Size = UDim2.new(0.9, 0, 0, 22)
+dragHandleButton.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+dragHandleButton.Text = "::: HOLD TO DRAG :::"
+dragHandleButton.TextColor3 = Color3.fromRGB(160, 160, 170)
+dragHandleButton.TextSize = 8
+dragHandleButton.Font = Enum.Font.FredokaOne
+dragHandleButton.AutoButtonColor = false
+dragHandleButton.Parent = hudBackground
+
+local handleCorner = Instance.new("UICorner")
+handleCorner.CornerRadius = UDim.new(0, 6)
+handleCorner.Parent = dragHandleButton
+
+local stroke8 = Instance.new("UIStroke")
+stroke8.Thickness = 1.5
+stroke8.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+stroke8.Parent = dragHandleButton
+
+-- Vertical Grid Layout Alignment for Primary Panel
+local uiListLayout = Instance.new("UIListLayout")
+uiListLayout.Padding = UDim.new(0, 5)
+uiListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+uiListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+uiListLayout.Parent = hudBackground
+
+-- Vertical Grid Layout Alignment for Left Sub-Panel
+local subListLayout = Instance.new("UIListLayout")
+subListLayout.Padding = UDim.new(0, 4)
+subListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+subListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+subListLayout.Parent = subPanel
+
+-- Create Screen FOV Circle Visual Asset
+local fovCircle = Instance.new("Frame")
+fovCircle.Name = "FOVCircle"
+fovCircle.Size = UDim2.new(0, FOV_RADIUS * 2, 0, FOV_RADIUS * 2)
+fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+fovCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
+fovCircle.BackgroundTransparency = 1
+fovCircle.Visible = fovEnabled
+fovCircle.Parent = screenGui
+
+local circleCorner = Instance.new("UICorner")
+circleCorner.CornerRadius = UDim.new(1, 0) 
+circleCorner.Parent = fovCircle
+
+local circleStroke = Instance.new("UIStroke")
+circleStroke.Thickness = 1.5
+circleStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+circleStroke.Transparency = 0.4
+circleStroke.Parent = fovCircle
+
+-- Tactical Button Construction Engine (Autonomous setup)
 local function createTacticalButton(name, text, size)
 	local btn = Instance.new("TextButton")
 	btn.Name = name
@@ -315,12 +436,9 @@ local function getClosestCharacterToCenter()
 			if onScreen then
 				local distToCenter = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
 				
-				-- Ensure they are technically inside the bounds perimeter circle
 				if distToCenter <= FOV_RADIUS then
 					local worldDistance = (trackingPart.Position - camera.CFrame.Position).Magnitude
 					
-					-- ABSOLUTE DISTANCE IS PARAMOUNT: By evaluating world distance directly first, 
-					-- an enemy right next to you on the edge of the FOV will completely override a far away crosshair target.
 					if worldDistance < closestWorldDistance then
 						if isPartVisible(trackingPart) then 
 							closestWorldDistance = worldDistance 
