@@ -1,0 +1,368 @@
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+local localPlayer = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+-- Configuration
+local RAINBOW_SPEED = 0.2 
+local FOV_RADIUS = 150 
+local COOLDOWN_DURATION = 2.0 
+
+-- State Configurations
+local locked = false
+local autolockEnabled = false 
+local wallCheckEnabled = false 
+local friendCheckEnabled = false 
+local menuExpanded = false 
+local targetMode = "Players" 
+local target = nil
+local lockConnection = nil
+local autolockConnection = nil
+local targetPartName = "Head"
+local fovEnabled = true 
+local autolockCooldownActive = false 
+
+-- Create Premium UI Setup
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "QuantumCamlockGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = localPlayer:WaitForChild("PlayerGui")
+
+-- MAIN ANCHOR FRAME
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainAnchor"
+mainFrame.Size = UDim2.new(0, 160, 0, 122) 
+mainFrame.Position = UDim2.new(0.85, -80, 0.55, -61)
+mainFrame.BackgroundTransparency = 1
+mainFrame.Parent = screenGui
+
+-- Primary Right Panel Base Card
+local hudBackground = Instance.new("Frame")
+hudBackground.Name = "HUDBackdrop"
+hudBackground.Size = UDim2.new(1, 0, 1, 0)
+hudBackground.Position = UDim2.new(0, 0, 0, 0)
+hudBackground.BackgroundColor3 = Color3.fromRGB(0, 0, 0) 
+hudBackground.BackgroundTransparency = 0 
+hudBackground.Parent = mainFrame
+
+local frameCorner = Instance.new("UICorner")
+frameCorner.CornerRadius = UDim.new(0, 14)
+frameCorner.Parent = hudBackground
+
+local hudStroke = Instance.new("UIStroke")
+hudStroke.Thickness = 1.5
+hudStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+hudStroke.Parent = hudBackground
+
+-- LEFT SUB-PANEL BASE CARD
+local subPanel = Instance.new("Frame")
+subPanel.Name = "SubPanel"
+subPanel.Size = UDim2.new(1, 0, 1.3, 0) 
+subPanel.Position = UDim2.new(0, 0, -0.15, 0) 
+subPanel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+subPanel.BackgroundTransparency = 0
+subPanel.Visible = false
+subPanel.Parent = mainFrame
+
+local subCorner = Instance.new("UICorner")
+subCorner.CornerRadius = UDim.new(0, 14)
+subCorner.Parent = subPanel
+
+local subStroke = Instance.new("UIStroke")
+subStroke.Thickness = 1.5
+subStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+subStroke.Parent = subPanel
+
+-- Master Highlight Object for Rainbow ESP
+local espHighlight = Instance.new("Highlight")
+espHighlight.Name = "CamlockESP"
+espHighlight.FillTransparency = 1 
+espHighlight.OutlineTransparency = 0
+espHighlight.Enabled = false
+espHighlight.Parent = screenGui
+
+-- Vertical Grid Layout Alignment for Primary Panel
+local uiListLayout = Instance.new("UIListLayout")
+uiListLayout.Padding = UDim.new(0, 5)
+uiListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+uiListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+uiListLayout.Parent = hudBackground
+
+-- Vertical Grid Layout Alignment for Left Sub-Panel
+local subListLayout = Instance.new("UIListLayout")
+subListLayout.Padding = UDim.new(0, 4)
+subListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+subListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+subListLayout.Parent = subPanel
+
+-- Create Screen FOV Circle Visual Asset
+local fovCircle = Instance.new("Frame")
+fovCircle.Name = "FOVCircle"
+fovCircle.Size = UDim2.new(0, FOV_RADIUS * 2, 0, FOV_RADIUS * 2)
+fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+fovCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
+fovCircle.BackgroundTransparency = 1
+fovCircle.Visible = fovEnabled
+fovCircle.Parent = screenGui
+
+local circleCorner = Instance.new("UICorner")
+circleCorner.CornerRadius = UDim.new(1, 0) 
+circleCorner.Parent = fovCircle
+
+local circleStroke = Instance.new("UIStroke")
+circleStroke.Thickness = 1.5
+circleStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+circleStroke.Transparency = 0.4
+circleStroke.Parent = fovCircle
+
+-- Tactical Button Construction Engine
+local function createTacticalButton(name, text, size)
+	local btn = Instance.new("TextButton")
+	btn.Name = name
+	btn.Size = size
+	btn.BackgroundColor3 = Color3.fromRGB(15, 15, 15) 
+	btn.TextColor3 = Color3.fromRGB(255, 50, 50) 
+	btn.Text = text
+	btn.TextSize = 10
+	btn.Font = Enum.Font.FredokaOne
+	btn.AutoButtonColor = false
+	
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 6)
+	corner.Parent = btn
+	
+	local stroke = Instance.new("UIStroke")
+	stroke.Thickness = 1.5
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	stroke.Parent = btn
+	
+	btn.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+			TweenService:Create(btn, TweenInfo.new(0.1), {Size = UDim2.new(size.X.Scale, size.X.Offset - 6, size.Y.Scale, size.Y.Offset - 2)}):Play()
+		end
+	end)
+	btn.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+			TweenService:Create(btn, TweenInfo.new(0.15), {Size = size}):Play()
+		end
+	end)
+	return btn, stroke
+end
+
+-- PRIMARY RIGHT UI BUTTON MEMBERS (Always available)
+local textButton, stroke1 = createTacticalButton("LockToggle", "TARGET: UNLOCKED", UDim2.new(0.9, 0, 0, 38))
+textButton.Parent = hudBackground
+
+local switchButton, stroke2 = createTacticalButton("PartSwitch", "AIM: HEAD", UDim2.new(0.95, 0, 0, 30))
+switchButton.TextColor3 = Color3.fromRGB(255, 255, 255) 
+switchButton.Parent = hudBackground
+
+-- STANDALONE EXTEND TOGGLE BUTTON
+local extendButton, strokeE = createTacticalButton("ExtendToggle", "[ < ]", UDim2.new(0, 30, 0, 30))
+extendButton.Position = UDim2.new(0, -36, 0.5, -15)
+extendButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+extendButton.Parent = hudBackground
+
+-- SUB-PANEL LEFT SIDE BUTTON MEMBERS
+local modeButton, stroke3 = createTacticalButton("ModeToggle", "TARGET: PLAYERS", UDim2.new(0.92, 0, 0, 26))
+modeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+modeButton.Parent = subPanel
+
+local fovToggleButton, stroke4 = createTacticalButton("FovToggle", "FOV: VISIBLE", UDim2.new(0.92, 0, 0, 24))
+fovToggleButton.TextColor3 = Color3.fromRGB(0, 255, 100) 
+fovToggleButton.Parent = subPanel
+
+local autoLockButton, stroke5 = createTacticalButton("AutoLockToggle", "AUTOLOCK: OFF", UDim2.new(0.92, 0, 0, 24))
+autoLockButton.Parent = subPanel
+
+local wallCheckButton, stroke6 = createTacticalButton("WallCheckToggle", "WALL CHECK: OFF", UDim2.new(0.92, 0, 0, 24))
+wallCheckButton.Parent = subPanel
+
+local friendCheckButton, stroke7 = createTacticalButton("FriendCheckToggle", "FRIEND CHECK: OFF", UDim2.new(0.92, 0, 0, 24))
+friendCheckButton.Parent = subPanel
+
+-- SHARED DRAG HANDLE PAD AT THE BOTTOM (Always available)
+local dragHandleButton = Instance.new("TextButton")
+dragHandleButton.Name = "DragHandle"
+dragHandleButton.Size = UDim2.new(0.9, 0, 0, 22)
+dragHandleButton.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+dragHandleButton.Text = "::: HOLD TO DRAG :::"
+dragHandleButton.TextColor3 = Color3.fromRGB(160, 160, 170)
+dragHandleButton.TextSize = 8
+dragHandleButton.Font = Enum.Font.FredokaOne
+dragHandleButton.AutoButtonColor = false
+dragHandleButton.Parent = hudBackground
+
+local handleCorner = Instance.new("UICorner")
+handleCorner.CornerRadius = UDim.new(0, 6)
+handleCorner.Parent = dragHandleButton
+
+local stroke8 = Instance.new("UIStroke")
+stroke8.Thickness = 1.5
+stroke8.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+stroke8.Parent = dragHandleButton
+
+-- Advanced Capture: Strict Real-World Distance Filtering First Mode
+local function getClosestCharacterToCenter()
+	local closestWorldDistance = math.huge
+	local closestChar = nil
+	local screenCenter = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
+	local targetsToScan = {}
+	
+	if targetMode == "Players" or targetMode == "All" then
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= localPlayer and p.Character and not isFriend(p) then table.insert(targetsToScan, p.Character) end
+		end
+	end
+	
+	if targetMode == "NPCs" or targetMode == "All" then
+		for _, descendant in ipairs(workspace:GetDescendants()) do
+			if descendant:IsA("Humanoid") and descendant.Parent and not Players:GetPlayerFromCharacter(descendant.Parent) then
+				if descendant.Parent ~= localPlayer.Character then table.insert(targetsToScan, descendant.Parent) end
+			end
+		end
+	end
+
+	for _, character in ipairs(targetsToScan) do
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		local trackingPart = getTargetPart(character)
+		
+		if humanoid and humanoid.Health > 0 and trackingPart then
+			local screenPos, onScreen = camera:WorldToViewportPoint(trackingPart.Position)
+			if onScreen then
+				local distToCenter = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
+				
+				-- Ensure they are technically inside the bounds perimeter circle
+				if distToCenter <= FOV_RADIUS then
+					local worldDistance = (trackingPart.Position - camera.CFrame.Position).Magnitude
+					
+					-- ABSOLUTE DISTANCE IS PARAMOUNT: By evaluating world distance directly first, 
+					-- an enemy right next to you on the edge of the FOV will completely override a far away crosshair target.
+					if worldDistance < closestWorldDistance then
+						if isPartVisible(trackingPart) then 
+							closestWorldDistance = worldDistance 
+							closestChar = character 
+						end
+					end
+				end
+			end
+		end
+	end
+	return closestChar
+end
+
+-- High Contrast Toggle Transitions
+local function uiAnimateState(activated)
+	if activated then
+		textButton.Text = "TARGET: LOCKED"
+		textButton.TextColor3 = Color3.fromRGB(0, 255, 100) 
+	else
+		textButton.Text = "TARGET: UNLOCKED"
+		textButton.TextColor3 = Color3.fromRGB(255, 50, 50) 
+	end
+end
+
+local function startLockOnTarget(chosenTarget)
+	target = chosenTarget uiAnimateState(true) locked = true
+	espHighlight.Adornee = target
+	espHighlight.Enabled = true
+	
+	lockConnection = RunService.RenderStepped:Connect(function()
+		local trackingPart = getTargetPart(target)
+		if target and trackingPart and target:FindFirstChildOfClass("Humanoid") and target.Humanoid.Health > 0 then
+			local targetPlayer = Players:GetPlayerFromCharacter(target)
+			if targetPlayer and isFriend(targetPlayer) then stopLockOnTarget() return end
+			
+			if not isPartVisible(trackingPart) then stopLockOnTarget() return end
+			camera.CFrame = CFrame.new(camera.CFrame.Position, trackingPart.Position)
+		else 
+			stopLockOnTarget() 
+		end
+	end)
+end
+
+function stopLockOnTarget()
+	if lockConnection then lockConnection:Disconnect() lockConnection = nil end
+	espHighlight.Enabled = false
+	espHighlight.Adornee = nil
+	target = nil locked = false uiAnimateState(false)
+end
+
+textButton.MouseButton1Click:Connect(function()
+	if locked then 
+		stopLockOnTarget() 
+		if autolockEnabled then
+			autolockCooldownActive = true
+			task.delay(COOLDOWN_DURATION, function() autolockCooldownActive = false end)
+		end
+	else
+		if autolockEnabled and autolockCooldownActive then return end 
+		local possibleTarget = getClosestCharacterToCenter()
+		if possibleTarget then startLockOnTarget(possibleTarget) end
+	end
+end)
+
+switchButton.MouseButton1Click:Connect(function()
+	if targetPartName == "Head" then targetPartName = "Torso" switchButton.Text = "AIM: TORSO"
+	elseif targetPartName == "Torso" then targetPartName = "HumanoidRootPart" switchButton.Text = "AIM: ROOT PART"
+	else targetPartName = "Head" switchButton.Text = "AIM: HEAD" end
+	stopLockOnTarget()
+end)
+
+extendButton.MouseButton1Click:Connect(function()
+	menuExpanded = not menuExpanded
+	if menuExpanded then
+		subPanel.Visible = true extendButton.Text = "[ > ]"
+		subPanel:TweenPosition(UDim2.new(-1, -40, -0.15, 0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.25, true)
+	else
+		extendButton.Text = "[ < ]"
+		subPanel:TweenPosition(UDim2.new(0, 0, -0.15, 0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.25, true)
+		task.spawn(function() task.wait(0.25) if not menuExpanded then subPanel.Visible = false end end)
+	end
+end)
+
+modeButton.MouseButton1Click:Connect(function()
+	if targetMode == "Players" then targetMode = "NPCs" modeButton.Text = "TARGET: NPCs"
+	elseif targetMode == "NPCs" then targetMode = "All" modeButton.Text = "TARGET: ALL"
+	else targetMode = "Players" modeButton.Text = "TARGET: PLAYERS" end
+	stopLockOnTarget()
+end)
+
+fovToggleButton.MouseButton1Click:Connect(function()
+	fovEnabled = not fovEnabled fovCircle.Visible = fovEnabled
+	if fovEnabled then fovToggleButton.Text = "FOV: VISIBLE" fovToggleButton.TextColor3 = Color3.fromRGB(0, 255, 100)
+	else fovToggleButton.Text = "FOV: HIDDEN" fovToggleButton.TextColor3 = Color3.fromRGB(255, 50, 50) end
+end)
+
+autoLockButton.MouseButton1Click:Connect(function()
+	autolockEnabled = not autolockEnabled stopLockOnTarget()
+	if autolockEnabled then
+		autoLockButton.Text = "AUTOLOCK: ON" autoLockButton.TextColor3 = Color3.fromRGB(0, 255, 100)
+		autolockConnection = RunService.RenderStepped:Connect(function() 
+			if not locked and not autolockCooldownActive then 
+				local potentialTarget = getClosestCharacterToCenter() 
+				if potentialTarget then startLockOnTarget(potentialTarget) end 
+			end 
+		end)
+	else
+		autoLockButton.Text = "AUTOLOCK: OFF" autoLockButton.TextColor3 = Color3.fromRGB(255, 50, 50)
+		if autolockConnection then autolockConnection:Disconnect() autolockConnection = nil end
+		autolockCooldownActive = false
+	end
+end)
+
+wallCheckButton.MouseButton1Click:Connect(function()
+	wallCheckEnabled = not wallCheckEnabled stopLockOnTarget()
+	if wallCheckEnabled then wallCheckButton.Text = "WALL CHECK: ON" wallCheckButton.TextColor3 = Color3.fromRGB(0, 255, 100)
+	else wallCheckButton.Text = "WALL CHECK: OFF" wallCheckButton.TextColor3 = Color3.fromRGB(255, 50, 50) end
+end)
+
+friendCheckButton.MouseButton1Click:Connect(function()
+	friendCheckEnabled = not friendCheckEnabled stopLockOnTarget()
+	if friendCheckEnabled then friendCheckButton.Text = "FRIEND CHECK: ON" friendCheckButton.TextColor3 = Color3.fromRGB(0, 255, 100)
+	else friendCheckButton.Text = "FRIEND CHECK: OFF" friendCheckButton.TextColor3 = Color3.fromRGB(255, 50, 50) end
+end)
