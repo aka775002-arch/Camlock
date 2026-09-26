@@ -206,6 +206,85 @@ stroke8.Thickness = 1.5
 stroke8.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 stroke8.Parent = dragHandleButton
 
+-- Dynamic part detection helper to get actual tracking object
+local function getTargetPart(character)
+	if not character then return nil end
+	if targetPartName == "Torso" then
+		return character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
+	end
+	return character:FindFirstChild(targetPartName)
+end
+
+-- Raycast Wall Checking Verification Function
+local function isPartVisible(part)
+	if not wallCheckEnabled then return true end
+	if not part then return false end
+	
+	local origin = camera.CFrame.Position
+	local direction = part.Position - origin
+	
+	local raycastParams = RaycastParams.new()
+	raycastParams.FilterDescendantsInstances = {localPlayer.Character or localPlayer.CharacterAdded:Wait(), part.Parent}
+	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+	raycastParams.IgnoreWater = true
+	
+	local result = workspace:Raycast(origin, direction, raycastParams)
+	if result then return false end
+	return true 
+end
+
+-- Friend Verification Cache Check
+local friendCache = {}
+local function isFriend(player)
+	if not friendCheckEnabled then return false end
+	if not player or player == localPlayer then return false end
+	if friendCache[player.UserId] ~= nil then return friendCache[player.UserId] end
+	
+	local success, result = pcall(function() return localPlayer:IsFriendsWith(player.UserId) end)
+	if success then friendCache[player.UserId] = result return result end
+	return false
+end
+
+-- Synchronized Global Rainbow State Rotator
+local hue = 0
+RunService.RenderStepped:Connect(function(deltaTime)
+	hue = (hue + (deltaTime * RAINBOW_SPEED)) % 1
+	local globalSyncColor = Color3.fromHSV(hue, 0.9, 1)
+	
+	hudStroke.Color = globalSyncColor
+	subStroke.Color = globalSyncColor
+	circleStroke.Color = globalSyncColor 
+	stroke1.Color = globalSyncColor
+	stroke2.Color = globalSyncColor
+	strokeE.Color = globalSyncColor
+	stroke3.Color = globalSyncColor
+	stroke4.Color = globalSyncColor
+	stroke5.Color = globalSyncColor
+	stroke6.Color = globalSyncColor
+	stroke7.Color = globalSyncColor
+	stroke8.Color = globalSyncColor
+	
+	if espHighlight.Enabled and espHighlight.Adornee then
+		espHighlight.OutlineColor = globalSyncColor
+	end
+end)
+
+-- Dragging Core Engine
+local dragging, dragInput, dragStart, startPos
+local function update(input)
+	local delta = input.Position - dragStart
+	mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+end
+
+dragHandleButton.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true dragStart = input.Position startPos = mainFrame.Position
+		input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
+	end
+end)
+dragHandleButton.InputChanged:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end end)
+UserInputService.InputChanged:Connect(function(input) if input == dragInput and dragging then update(input) end end)
+
 -- Advanced Capture: Strict Real-World Distance Filtering First Mode
 local function getClosestCharacterToCenter()
 	local closestWorldDistance = math.huge
