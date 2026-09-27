@@ -470,7 +470,7 @@ local stroke8 = Instance.new("UIStroke"); stroke8.Thickness = 1.5; stroke8.Apply
 shared.fovCircle = Instance.new("Frame")
 shared.fovCircle.Size = UDim2.new(0, shared.FOV_RADIUS * 2, 0, shared.FOV_RADIUS * 2)
 shared.fovCircle.AnchorPoint = Vector2.new(0.5, 0.5); shared.fovCircle.BackgroundTransparency = 1; shared.fovCircle.Visible = shared.fovEnabled; shared.fovCircle.Parent = screenGui
-local cCorner = Instance.new("UICorner"); cCorner.CornerRadius = UDim.new(1, 0); cCorner.Parent = screenGui
+local cCorner = Instance.new("UICorner"); cCorner.CornerRadius = UDim.new(1, 0); cCorner.Parent = shared.fovCircle
 shared.circleStroke = Instance.new("UIStroke"); shared.circleStroke.Thickness = 1.5; shared.circleStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; shared.circleStroke.Transparency = 0.4; shared.circleStroke.Parent = shared.fovCircle
 
 local dragging, dragInput, dragStart, sPos
@@ -579,8 +579,15 @@ shared.switchButton.Activated:Connect(function()
 	shared.switchButton.Text = "AIM MOD: " .. currentBone:upper()
 end)
 
+-- CRITICAL ASSIGNMENT CONVERSION REPAIR: Standardized operation with structural double equals comparisons
 shared.modeButton.Activated:Connect(function()
-	if shared.targetMode == "Players" then shared.targetMode = "NPCs" elseif shared.targetMode = "NPCs" then shared.targetMode = "All" else shared.targetMode = "Players" end
+	if shared.targetMode == "Players" then 
+		shared.targetMode = "NPCs" 
+	elseif shared.targetMode == "NPCs" then 
+		shared.targetMode = "All" 
+	else 
+		shared.targetMode = "Players" 
+	end
 	shared.modeButton.Text = "MODE: " .. shared.targetMode:upper()
 end)
 
