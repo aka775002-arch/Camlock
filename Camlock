@@ -1,451 +1,648 @@
--- Services
+-- ============================================================================
+-- PART 1: CORE CONFIGURATIONS & GLOBAL FRAMEWORK STATES
+-- ============================================================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 
 local localPlayer = Players.LocalPlayer
-local playerGui = localPlayer:WaitForChild("PlayerGui")
 local camera = workspace.CurrentCamera
 
--- Configuration
-local RAINBOW_SPEED = 0.2 
-local FOV_RADIUS = 150 
-local COOLDOWN_DURATION = 2.0 
+shared.RAINBOW_SPEED = 0.20 
+shared.FOV_RADIUS = 120 
+shared.MAX_FOV_LIMIT = 300
+shared.MIN_FOV_LIMIT = 10
+shared.COOLDOWN_DURATION = 2.0 -- Strict 2-second manual unlocking cooldown timer configuration
 
--- ANTI-DUPLICATE GUARD: Instantly deletes any glitched existing UI instances
-local existingGui = playerGui:FindFirstChild("QuantumCamlockGui")
-if existingGui then 
-	existingGui:Destroy() 
+-- Configuration slider limits
+shared.SMOOTHNESS_VALUE = 0.00 
+shared.MAX_SMOOTHNESS_LIMIT = 1.00
+shared.PREDICTION_VALUE = 0.00
+shared.MAX_PREDICTION_LIMIT = 10.00
+
+shared.locked = false; shared.autolockEnabled = false 
+shared.friendCheckEnabled = false; shared.wallCheckEnabled = false; shared.teamCheckEnabled = false
+shared.crosshairEnabled = true; shared.espMasterEnabled = true 
+shared.menuExpanded = false 
+shared.targetMode = "Players" 
+shared.target = nil; shared.lockConnection = nil; shared.fovEnabled = true 
+shared.autolockCooldownActive = false
+
+shared.targetPartIndex = 1
+shared.targetPartList = {"Head", "Torso", "HumanoidRootPart", "Left Arm", "Right Arm", "Left Leg", "Right Leg"}
+shared.targetPartName = shared.targetPartList[shared.targetPartIndex]
+
+shared.wallCheckParams = RaycastParams.new()
+shared.wallCheckParams.FilterType = Enum.RaycastFilterType.Exclude
+shared.wallCheckParams.IgnoreWater = true
+
+shared.allStrokes = {}; shared.crosshairLines = {} 
+shared.activeEspStorage = {}; shared.themeBackgrounds = {}
+
+function shared.isWallBetween(part)
+	if not shared.wallCheckEnabled then return false end
+	local res = workspace:Raycast(camera.CFrame.Position, part.Position - camera.CFrame.Position, shared.wallCheckParams)
+	return (res and res.Instance and not res.Instance:IsDescendantOf(part.Parent)) and true or false
 end
+print("[Part 1/8] Initial Configurations Configured.")
 
--- State Configurations
-local locked = false
-local autolockEnabled = false 
-local wallCheckEnabled = false 
-local friendCheckEnabled = false 
-local menuExpanded = false 
-local targetMode = "Players" 
-local target = nil
-local lockConnection = nil
-local autolockConnection = nil
-local targetPartName = "Head"
-local fovEnabled = true 
-local autolockCooldownActive = false 
+-- ============================================================================
+-- PART 2: PROXIMITY TARGETING ALGORITHMS & LIMB RESOLUTION
+-- ============================================================================
+local Players = game:GetService("Players")
+local camera = workspace.CurrentCamera
+local localPlayer = Players.LocalPlayer
 
--- Create Unified Core GUI ScreenGui Container
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "QuantumCamlockGui"
-screenGui.ResetOnSpawn = false -- Stops duplication stacks on avatar death
-screenGui.Parent = playerGui
-
--- MAIN ANCHOR COORDINATE FRAME
-local mainFrame = Instance.new("Frame")
-mainFrame.Name = "MainAnchor"
-mainFrame.Size = UDim2.new(0, 160, 0, 122) 
-mainFrame.Position = UDim2.new(0.85, -80, 0.55, -61)
-mainFrame.BackgroundTransparency = 1 -- Keep wrapper transparent, but contents solid
-mainFrame.Parent = screenGui
-
--- Primary Right Panel Base Card (FORCED SOLID BACKGROUND FILL)
-local hudBackground = Instance.new("Frame")
-hudBackground.Name = "HUDBackdrop"
-hudBackground.Size = UDim2.new(1, 0, 1, 0)
-hudBackground.Position = UDim2.new(0, 0, 0, 0)
-hudBackground.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Deep Black Fill
-hudBackground.BackgroundTransparency = 0 -- 100% Solid background visible
-hudBackground.BorderSizePixel = 0
-hudBackground.Parent = mainFrame
-
-local frameCorner = Instance.new("UICorner")
-frameCorner.CornerRadius = UDim.new(0, 14)
-frameCorner.Parent = hudBackground
-
-local hudStroke = Instance.new("UIStroke")
-hudStroke.Thickness = 1.5
-hudStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-hudStroke.Parent = hudBackground
-
--- LEFT SUB-PANEL BASE CARD (FORCED SOLID BACKGROUND FILL)
-local subPanel = Instance.new("Frame")
-subPanel.Name = "SubPanel"
-subPanel.Size = UDim2.new(1, 0, 1.3, 0) 
-subPanel.Position = UDim2.new(0, 0, -0.15, 0) -- Nestles directly behind primary until extended
-subPanel.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Deep Black Fill
-subPanel.BackgroundTransparency = 0 -- 100% Solid background visible
-subPanel.BorderSizePixel = 0
-subPanel.Visible = false
-subPanel.Parent = mainFrame
-
-local subCorner = Instance.new("UICorner")
-subCorner.CornerRadius = UDim.new(0, 14)
-subCorner.Parent = subPanel
-
-local subStroke = Instance.new("UIStroke")
-subStroke.Thickness = 1.5
-subStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-subStroke.Parent = subPanel
-
--- Master Highlight Object for Rainbow ESP
-local espHighlight = Instance.new("Highlight")
-espHighlight.Name = "CamlockESP"
-espHighlight.FillTransparency = 1 
-espHighlight.OutlineTransparency = 0
-espHighlight.Enabled = false
-espHighlight.Parent = screenGui
-
--- Vertical Grid Layout Alignment for Primary Panel
-local uiListLayout = Instance.new("UIListLayout")
-uiListLayout.Padding = UDim.new(0, 5)
-uiListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-uiListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-uiListLayout.Parent = hudBackground
-
--- Vertical Grid Layout Alignment for Left Sub-Panel
-local subListLayout = Instance.new("UIListLayout")
-subListLayout.Padding = UDim.new(0, 4)
-subListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-subListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-subListLayout.Parent = subPanel
-
--- Create Screen FOV Circle Visual Asset
-local fovCircle = Instance.new("Frame")
-fovCircle.Name = "FOVCircle"
-fovCircle.Size = UDim2.new(0, FOV_RADIUS * 2, 0, FOV_RADIUS * 2)
-fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
-fovCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
-fovCircle.BackgroundTransparency = 1
-fovCircle.Visible = fovEnabled
-fovCircle.Parent = screenGui
-
-local circleCorner = Instance.new("UICorner")
-circleCorner.CornerRadius = UDim.new(1, 0) 
-circleCorner.Parent = fovCircle
-
-local circleStroke = Instance.new("UIStroke")
-circleStroke.Thickness = 1.5
-circleStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-circleStroke.Transparency = 0.4
-circleStroke.Parent = fovCircle
-
--- Tactical Button Construction Engine
-local function createTacticalButton(name, text, size)
-	local btn = Instance.new("TextButton")
-	btn.Name = name
-	btn.Size = size
-	btn.BackgroundColor3 = Color3.fromRGB(15, 15, 15) 
-	btn.TextColor3 = Color3.fromRGB(255, 50, 50) 
-	btn.Text = text
-	btn.TextSize = 10
-	btn.Font = Enum.Font.FredokaOne
-	btn.AutoButtonColor = false
+function shared.resolveTargetPart(char)
+	if not char then return nil end
+	local name = shared.targetPartName
+	local part = char:FindFirstChild(name)
+	if part then return part end
 	
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 6)
-	corner.Parent = btn
-	
-	local stroke = Instance.new("UIStroke")
-	stroke.Thickness = 1.5
-	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	stroke.Parent = btn
-	
-	btn.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-			TweenService:Create(btn, TweenInfo.new(0.1), {Size = UDim2.new(size.X.Scale, size.X.Offset - 6, size.Y.Scale, size.Y.Offset - 2)}):Play()
-		end
-	end)
-	btn.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-			TweenService:Create(btn, TweenInfo.new(0.15), {Size = size}):Play()
-		end
-	end)
-	return btn, stroke
-end
-
--- PRIMARY RIGHT UI BUTTON MEMBERS (Always available)
-local textButton, stroke1 = createTacticalButton("LockToggle", "TARGET: UNLOCKED", UDim2.new(0.9, 0, 0, 38))
-textButton.Parent = hudBackground
-
-local switchButton, stroke2 = createTacticalButton("PartSwitch", "AIM: HEAD", UDim2.new(0.95, 0, 0, 30))
-switchButton.TextColor3 = Color3.fromRGB(255, 255, 255) 
-switchButton.Parent = hudBackground
-
--- STANDALONE EXTEND TOGGLE BUTTON
-local extendButton, strokeE = createTacticalButton("ExtendToggle", "[ < ]", UDim2.new(0, 30, 0, 30))
-extendButton.Position = UDim2.new(0, -36, 0.5, -15)
-extendButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-extendButton.Parent = hudBackground
-
--- SUB-PANEL LEFT SIDE BUTTON MEMBERS
-local modeButton, stroke3 = createTacticalButton("ModeToggle", "TARGET: PLAYERS", UDim2.new(0.92, 0, 0, 26))
-modeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-modeButton.Parent = subPanel
-
-local fovToggleButton, stroke4 = createTacticalButton("FovToggle", "FOV: VISIBLE", UDim2.new(0.92, 0, 0, 24))
-fovToggleButton.TextColor3 = Color3.fromRGB(0, 255, 100) 
-fovToggleButton.Parent = subPanel
-
-local autoLockButton, stroke5 = createTacticalButton("AutoLockToggle", "AUTOLOCK: OFF", UDim2.new(0.92, 0, 0, 24))
-autoLockButton.Parent = subPanel
-
-local wallCheckButton, stroke6 = createTacticalButton("WallCheckToggle", "WALL CHECK: OFF", UDim2.new(0.92, 0, 0, 24))
-wallCheckButton.Parent = subPanel
-
-local friendCheckButton, stroke7 = createTacticalButton("FriendCheckToggle", "FRIEND CHECK: OFF", UDim2.new(0.92, 0, 0, 24))
-friendCheckButton.Parent = subPanel
-
--- FIXED ALWAYS STABLE DRAG HANDLE AT THE BOTTOM
-local dragHandleButton = Instance.new("TextButton")
-dragHandleButton.Name = "DragHandle"
-dragHandleButton.Size = UDim2.new(0.9, 0, 0, 22)
-dragHandleButton.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-dragHandleButton.Text = "::: HOLD TO DRAG :::"
-dragHandleButton.TextColor3 = Color3.fromRGB(160, 160, 170)
-dragHandleButton.TextSize = 8
-dragHandleButton.Font = Enum.Font.FredokaOne
-dragHandleButton.AutoButtonColor = false
-dragHandleButton.Parent = hudBackground
-
-local handleCorner = Instance.new("UICorner")
-handleCorner.CornerRadius = UDim.new(0, 6)
-handleCorner.Parent = dragHandleButton
-
-local stroke8 = Instance.new("UIStroke")
-stroke8.Thickness = 1.5
-stroke8.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-stroke8.Parent = dragHandleButton
-
--- Dynamic part detection helper to get actual tracking object
-local function getTargetPart(character)
-	if not character then return nil end
-	if targetPartName == "Torso" then
-		return character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
+	if name == "Torso" then
+		return char:FindFirstChild("UpperTorso") or char:FindFirstChild("LowerTorso")
+	elseif name == "Left Arm" then
+		return char:FindFirstChild("LeftHand") or char:FindFirstChild("LeftLowerArm") or char:FindFirstChild("LeftUpperArm")
+	elseif name == "Right Arm" then
+		return char:FindFirstChild("RightHand") or char:FindFirstChild("RightLowerArm") or char:FindFirstChild("RightUpperArm")
+	elseif name == "Left Leg" then
+		return char:FindFirstChild("LeftFoot") or char:FindFirstChild("LeftLowerLeg") or char:FindFirstChild("LeftUpperLeg")
+	elseif name == "Right Leg" then
+		return char:FindFirstChild("RightFoot") or char:FindFirstChild("RightLowerLeg") or char:FindFirstChild("RightUpperLeg")
 	end
-	return character:FindFirstChild(targetPartName)
+	return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChildOfClass("Part")
 end
 
--- Raycast Wall Checking Verification Function
-local function isPartVisible(part)
-	if not wallCheckEnabled then return true end
-	if not part then return false end
+function shared.getClosestTarget()
+	local localChar = localPlayer.Character
+	if not localChar or not localChar:FindFirstChild("HumanoidRootPart") then return nil end
+	local closestTarget, shortestDistance = nil, math.huge
+	local centerScreen = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
 	
-	local origin = camera.CFrame.Position
-	local direction = part.Position - origin
-	
-	local raycastParams = RaycastParams.new()
-	raycastParams.FilterDescendantsInstances = {localPlayer.Character or localPlayer.CharacterAdded:Wait(), part.Parent}
-	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-	raycastParams.IgnoreWater = true
-	
-	local result = workspace:Raycast(origin, direction, raycastParams)
-	if result then return false end
-	return true 
-end
-
--- Friend Verification Cache Check
-local friendCache = {}
-local function isFriend(player)
-	if not friendCheckEnabled then return false end
-	if not player or player == localPlayer then return false end
-	if friendCache[player.UserId] ~= nil then return friendCache[player.UserId] end
-	
-	local success, result = pcall(function() return localPlayer:IsFriendsWith(player.UserId) end)
-	if success then friendCache[player.UserId] = result return result end
-	return false
-end
-
--- Synchronized Global Rainbow State Rotator (RE-ADDED TO ALL SECTIONS AND FOV)
-local hue = 0
-RunService.RenderStepped:Connect(function(deltaTime)
-	hue = (hue + (deltaTime * RAINBOW_SPEED)) % 1
-	local globalSyncColor = Color3.fromHSV(hue, 0.9, 1)
-	
-	hudStroke.Color = globalSyncColor
-	subStroke.Color = globalSyncColor
-	circleStroke.Color = globalSyncColor -- Circle re-unified under rainbow sync loop
-	stroke1.Color = globalSyncColor
-	stroke2.Color = globalSyncColor
-	strokeE.Color = globalSyncColor
-	stroke3.Color = globalSyncColor
-	stroke4.Color = globalSyncColor
-	stroke5.Color = globalSyncColor
-	stroke6.Color = globalSyncColor
-	stroke7.Color = globalSyncColor
-	stroke8.Color = globalSyncColor
-	
-	if espHighlight.Enabled and espHighlight.Adornee then
-		espHighlight.OutlineColor = globalSyncColor
-	end
-end)
-
--- Dragging Core Engine (Always stable and operational)
-local dragging, dragInput, dragStart, startPos
-local function update(input)
-	local delta = input.Position - dragStart
-	mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-end
-
-dragHandleButton.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		dragging = true dragStart = input.Position startPos = mainFrame.Position
-		input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
-	end
-end)
-dragHandleButton.InputChanged:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end end)
-UserInputService.InputChanged:Connect(function(input) if input == dragInput and dragging then update(input) end end)
-
--- Advanced Capture: Strict Real-World Distance Filtering First Mode
-local function getClosestCharacterToCenter()
-	local closestWorldDistance = math.huge
-	local closestChar = nil
-	local screenCenter = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
-	local targetsToScan = {}
-	
-	if targetMode == "Players" or targetMode == "All" then
-		for _, p in ipairs(Players:GetPlayers()) do
-			if p ~= localPlayer and p.Character and not isFriend(p) then table.insert(targetsToScan, p.Character) end
-		end
-	end
-	
-	if targetMode == "NPCs" or targetMode == "All" then
-		for _, descendant in ipairs(workspace:GetDescendants()) do
-			if descendant:IsA("Humanoid") and descendant.Parent and not Players:GetPlayerFromCharacter(descendant.Parent) then
-				if descendant.Parent ~= localPlayer.Character then table.insert(targetsToScan, descendant.Parent) end
+	local function checkChar(char, pObj)
+		if not char or char == localChar then return end
+		local part = shared.resolveTargetPart(char)
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		if part and hum and hum.Health > 0 then
+			-- Verification filtering loops for targeted properties configurations
+			if pObj then
+				if shared.friendCheckEnabled and localPlayer:IsFriendsWith(pObj.UserId) then return end
+				if shared.teamCheckEnabled and localPlayer.Team and pObj.Team and (localPlayer.Team == pObj.Team) then return end
 			end
-		end
-	end
-
-	for _, character in ipairs(targetsToScan) do
-		local humanoid = character:FindFirstChildOfClass("Humanoid")
-		local trackingPart = getTargetPart(character)
-		
-		if humanoid and humanoid.Health > 0 and trackingPart then
-			local screenPos, onScreen = camera:WorldToViewportPoint(trackingPart.Position)
-			if onScreen then
-				local distToCenter = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
-				if distToCenter <= FOV_RADIUS then
-					local worldDistance = (trackingPart.Position - camera.CFrame.Position).Magnitude
-					if worldDistance < closestWorldDistance then
-						if isPartVisible(trackingPart) then 
-							closestWorldDistance = worldDistance 
-							closestChar = character 
-						end
-					end
+			
+			local sPos, onScreen = camera:WorldToViewportPoint(part.Position)
+			if onScreen and (Vector2.new(sPos.X, sPos.Y) - centerScreen).Magnitude < shared.FOV_RADIUS then
+				local dist = (part.Position - localChar.HumanoidRootPart.Position).Magnitude
+				if dist < shortestDistance and not shared.isWallBetween(part) then 
+					shortestDistance = dist
+					closestTarget = part 
 				end
 			end
 		end
 	end
-	return closestChar
-end
-
--- High Contrast Toggle Transitions
-local function uiAnimateState(activated)
-	if activated then
-		textButton.Text = "TARGET: LOCKED"
-		textButton.TextColor3 = Color3.fromRGB(0, 255, 100) 
-	else
-		textButton.Text = "TARGET: UNLOCKED"
-		textButton.TextColor3 = Color3.fromRGB(255, 50, 50) 
-	end
-end
-
-local function startLockOnTarget(chosenTarget)
-	target = chosenTarget uiAnimateState(true) locked = true
-	espHighlight.Adornee = target
-	espHighlight.Enabled = true
-	
-	lockConnection = RunService.RenderStepped:Connect(function()
-		local trackingPart = getTargetPart(target)
-		if target and trackingPart and target:FindFirstChildOfClass("Humanoid") and target.Humanoid.Health > 0 then
-			local targetPlayer = Players:GetPlayerFromCharacter(target)
-			if targetPlayer and isFriend(targetPlayer) then stopLockOnTarget() return end
-			
-			if not isPartVisible(trackingPart) then stopLockOnTarget() return end
-			camera.CFrame = CFrame.new(camera.CFrame.Position, trackingPart.Position)
-		else 
-			stopLockOnTarget() 
-		end
-	end)
-end
-
-function stopLockOnTarget()
-	if lockConnection then lockConnection:Disconnect() lockConnection = nil end
-	espHighlight.Enabled = false
-	espHighlight.Adornee = nil
-	target = nil locked = false uiAnimateState(false)
-end
-
-textButton.MouseButton1Click:Connect(function()
-	if locked then 
-		stopLockOnTarget() 
-		if autolockEnabled then
-			autolockCooldownActive = true
-			task.delay(COOLDOWN_DURATION, function() autolockCooldownActive = false end)
-		end
-	else
-		if autolockEnabled and autolockCooldownActive then return end 
-		local possibleTarget = getClosestCharacterToCenter()
-		if possibleTarget then startLockOnTarget(possibleTarget) end
-	end
-end)
-
-switchButton.MouseButton1Click:Connect(function()
-	if targetPartName == "Head" then targetPartName = "Torso" switchButton.Text = "AIM: TORSO"
-	elseif targetPartName == "Torso" then targetPartName = "HumanoidRootPart" switchButton.Text = "AIM: ROOT PART"
-	else targetPartName = "Head" switchButton.Text = "AIM: HEAD" end
-	stopLockOnTarget()
-end)
-
-extendButton.MouseButton1Click:Connect(function()
-	menuExpanded = not menuExpanded
-	if menuExpanded then
-		subPanel.Visible = true extendButton.Text = "[ > ]"
-		subPanel:TweenPosition(UDim2.new(-1, -40, -0.15, 0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.25, true)
-	else
-		extendButton.Text = "[ < ]"
-		subPanel:TweenPosition(UDim2.new(0, 0, -0.15, 0), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.25, true)
-		task.spawn(function() task.wait(0.25) if not menuExpanded then subPanel.Visible = false end end)
-	end
-end)
-
-modeButton.MouseButton1Click:Connect(function()
-	if targetMode == "Players" then targetMode = "NPCs" modeButton.Text = "TARGET: NPCs"
-	elseif targetMode == "NPCs" then targetMode = "All" modeButton.Text = "TARGET: ALL"
-	else targetMode = "Players" modeButton.Text = "TARGET: PLAYERS" end
-	stopLockOnTarget()
-end)
-
-fovToggleButton.MouseButton1Click:Connect(function()
-	fovEnabled = not fovEnabled fovCircle.Visible = fovEnabled
-	if fovEnabled then fovToggleButton.Text = "FOV: VISIBLE" fovToggleButton.TextColor3 = Color3.fromRGB(0, 255, 100)
-	else fovToggleButton.Text = "FOV: HIDDEN" fovToggleButton.TextColor3 = Color3.fromRGB(255, 50, 50) end
-end)
-
-autoLockButton.MouseButton1Click:Connect(function()
-	autolockEnabled = not autolockEnabled stopLockOnTarget()
-	if autolockEnabled then
-		autoLockButton.Text = "AUTOLOCK: ON" autoLockButton.TextColor3 = Color3.fromRGB(0, 255, 100)
-		autolockConnection = RunService.RenderStepped:Connect(function() 
-			if not locked and not autolockCooldownActive then 
-				local potentialTarget = getClosestCharacterToCenter() 
-				if potentialTarget then startLockOnTarget(potentialTarget) end 
+	if shared.targetMode == "Players" or shared.targetMode == "All" then
+		for _, p in ipairs(Players:GetPlayers()) do 
+			if p ~= localPlayer and p.Character then 
+				checkChar(p.Character, p) 
 			end 
+		end
+	end
+	if shared.targetMode == "NPCs" or shared.targetMode == "All" then
+		for _, d in ipairs(workspace:GetDescendants()) do 
+			if d:IsA("Model") and d:FindFirstChildOfClass("Humanoid") and d ~= localChar and not Players:GetPlayerFromCharacter(d) then 
+				checkChar(d, nil) 
+			end 
+		end
+	end
+	return closestTarget
+end
+print("[Part 2/8] Focus Target System Stacked.")
+
+-- ============================================================================
+-- PART 3: HORIZONTAL TELEMETRY ESP SECTOR DRAWING ENGINE
+-- ============================================================================
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+local RunService = game:GetService("RunService")
+local localPlayer = Players.LocalPlayer
+
+local function round(num, numDecimalPlaces)
+	local mult = 10^(numDecimalPlaces or 0)
+	return math.floor(num * mult + 0.5) / mult
+end
+
+local function getEquippedWeapon(char)
+	if not char then return "NONE" end
+	local tool = char:FindFirstChildOfClass("Tool")
+	return tool and tool.Name:upper() or "NONE"
+end
+
+function shared.makeEsp(plr, isNpc)
+	local char = isNpc and plr or plr.Character
+	if not char or char == localPlayer.Character then return end
+	
+	local identifier = isNpc and plr.Name .. "_NPC_ESP" or plr.Name .. "_ESP"
+	
+	local existing = CoreGui:FindFirstChild(identifier)
+	if existing then existing:Destroy() end
+	
+	local targetAdornee = char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart") or char:FindFirstChildOfClass("Part")
+	if not targetAdornee then return end
+	
+	local ESPholder = Instance.new("Folder")
+	ESPholder.Name = identifier
+	ESPholder.Parent = CoreGui
+	
+	local highlight = Instance.new("Highlight")
+	highlight.Name = "EspOutline"
+	highlight.Adornee = char
+	highlight.FillTransparency = 0.85
+	highlight.OutlineTransparency = 0.15
+	highlight.Parent = ESPholder
+	
+	local BillboardGui = Instance.new("BillboardGui")
+	local TextLabel = Instance.new("TextLabel")
+	
+	BillboardGui.Adornee = targetAdornee
+	BillboardGui.Name = "EspTextGui"
+	BillboardGui.Parent = ESPholder
+	BillboardGui.Size = UDim2.new(0, 150, 0, 150)
+	BillboardGui.StudsOffset = Vector3.new(0, 1.5, 0)
+	BillboardGui.AlwaysOnTop = true
+	
+	TextLabel.Parent = BillboardGui
+	TextLabel.BackgroundTransparency = 1
+	TextLabel.Position = UDim2.new(0, -25, 0, -50)
+	TextLabel.Size = UDim2.new(0, 200, 0, 100)
+	TextLabel.Font = Enum.Font.GothamBold
+	TextLabel.TextSize = 13.5
+	TextLabel.TextColor3 = Color3.new(1, 1, 1)
+	TextLabel.TextStrokeTransparency = 0.1
+	TextLabel.TextYAlignment = Enum.TextYAlignment.Bottom
+	TextLabel.ZIndex = 10
+	
+	shared.activeEspStorage[char] = {
+		gui = ESPholder, 
+		label = TextLabel, 
+		coreHighlight = highlight, 
+		npcFlag = isNpc, 
+		playerLink = isNpc and nil or plr
+	}
+end
+
+function shared.updateEspSectors()
+	if not shared.espMasterEnabled then 
+		for char, i in pairs(shared.activeEspStorage) do if i.gui then i.gui:Destroy() end end
+		table.clear(shared.activeEspStorage)
+		
+		for _, c in pairs(CoreGui:GetChildren()) do
+			if string.sub(c.Name, -4) == "_ESP" then c:Destroy() end
+		end
+		return 
+	end
+	
+	for char, i in pairs(shared.activeEspStorage) do 
+		if not char.Parent or (char:FindFirstChildOfClass("Humanoid") and char:FindFirstChildOfClass("Humanoid").Health <= 0) then 
+			if i.gui then i.gui:Destroy() end
+			shared.activeEspStorage[char] = nil 
+		end 
+	end
+	
+	if shared.targetMode == "Players" or shared.targetMode == "All" then
+		for _, p in ipairs(Players:GetPlayers()) do 
+			if p ~= localPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then 
+				if not shared.activeEspStorage[p.Character] then shared.makeEsp(p, false) end
+			end 
+		end
+	end
+	
+	if shared.targetMode == "NPCs" or shared.targetMode == "All" then
+		for _, d in ipairs(workspace:GetDescendants()) do 
+			if d:IsA("Model") and d:FindFirstChildOfClass("Humanoid") and d ~= localPlayer.Character and not Players:GetPlayerFromCharacter(d) then 
+				if d:FindFirstChild("HumanoidRootPart") and not shared.activeEspStorage[d] then 
+					shared.makeEsp(d, true) 
+				end
+			end 
+		end
+	end
+	
+	local localRoot = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+	local currentRainbowColor = Color3.fromHSV((tick() * shared.RAINBOW_SPEED) % 1, 0.95, 1)
+
+	for char, data in pairs(shared.activeEspStorage) do
+		if (shared.targetMode == "Players" and data.npcFlag) or (shared.targetMode == "NPCs" and not data.npcFlag) then
+			if data.gui then data.gui:Destroy() end
+			shared.activeEspStorage[char] = nil; continue
+		end
+		
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		local root = char:FindFirstChild("HumanoidRootPart")
+		if hum and root and localRoot then
+			local distance = math.floor((root.Position - localRoot.Position).Magnitude)
+			local nameText = data.npcFlag and "NPC: " .. char.Name or data.playerLink.Name
+			local equippedWeapon = getEquippedWeapon(char)
+			
+			data.label.Text = string.format("WEAPON: %s\nNAME: %s | HP: %s | DIST: %d", equippedWeapon, nameText:upper(), string.format("%.1f", hum.Health), distance)
+			
+			-- Priority Coloring Hierarchy Rules System
+			local espColor = Color3.fromRGB(255, 60, 60) -- Default Fallback: Enemy Red
+			local isTeammate = false
+
+			if data.playerLink then
+				local isFriend = localPlayer:IsFriendsWith(data.playerLink.UserId)
+				local isSameTeam = localPlayer.Team and data.playerLink.Team and (localPlayer.Team == data.playerLink.Team)
+				if isFriend or isSameTeam then
+					isTeammate = true
+				end
+			end
+
+			if isTeammate then
+				espColor = currentRainbowColor -- Rule 1: Friends/Teammates = Rainbow Highlight
+			elseif shared.wallCheckEnabled and shared.isWallBetween(root) then 
+				espColor = Color3.fromRGB(0, 240, 255) -- Rule 2: Behind Walls = Cyan
+			elseif data.npcFlag then 
+				espColor = Color3.fromRGB(245, 245, 60) -- Rule 3: Neutral Targets = Yellow
+			end
+			
+			data.coreHighlight.OutlineColor = espColor
+			data.coreHighlight.FillColor = espColor
+			data.label.TextColor3 = Color3.new(1, 1, 1)
+		end
+	end
+end
+print("[Part 3/8] Telemetry Filtering Engines Active.")
+
+-- ============================================================================
+-- PART 4: MAIN ROUNDED HUD BASE PANEL SETUP
+-- ============================================================================
+local Players = game:GetService("Players")
+local localPlayer = Players.LocalPlayer
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "QuantumCamlockGui"; screenGui.ResetOnSpawn = false; screenGui.IgnoreGuiInset = true; screenGui.Parent = localPlayer:WaitForChild("PlayerGui")
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainAnchor"; mainFrame.Size = UDim2.new(0, 195, 0, 165); mainFrame.Position = UDim2.new(0.85, -97, 0.45, -82); mainFrame.BackgroundTransparency = 1; mainFrame.Parent = screenGui
+
+local hudBackground = Instance.new("Frame")
+hudBackground.Name = "HUDBackdrop"; hudBackground.Size = UDim2.new(1, 0, 1, 0); hudBackground.BackgroundColor3 = Color3.fromRGB(4, 4, 8); hudBackground.BackgroundTransparency = 0.25; hudBackground.Parent = mainFrame
+table.insert(shared.themeBackgrounds, hudBackground)
+
+local frameCorner = Instance.new("UICorner")
+frameCorner.CornerRadius = UDim.new(0, 8); frameCorner.Parent = hudBackground
+
+shared.hudStroke = Instance.new("UIStroke")
+shared.hudStroke.Thickness = 2.0; shared.hudStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; shared.hudStroke.Parent = hudBackground
+
+function shared.createTacticalButton(name, text, size)
+	local btn = Instance.new("TextButton")
+	btn.Name = name; btn.Size = size; btn.BackgroundColor3 = Color3.fromRGB(12, 12, 20); btn.BackgroundTransparency = 0.15; btn.TextColor3 = Color3.fromRGB(245, 245, 255); btn.Text = text; btn.TextSize = 10.5; btn.Font = Enum.Font.GothamBold; btn.AutoButtonColor = false
+	local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, 5); corner.Parent = btn
+	local stroke = Instance.new("UIStroke"); stroke.Thickness = 1.2; stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; stroke.Parent = btn
+	table.insert(shared.allStrokes, stroke)
+	return btn
+end
+
+shared.mainFrame = mainFrame; shared.hudBackground = hudBackground; shared.screenGui = screenGui
+print("[Part 4/8] Rounded HUD Elements Operational.")
+
+-- ============================================================================
+-- PART 5: MODULAR BUTTONS, EXPANDABLE TRAYS & VECTOR CROSSHAIRS
+-- ============================================================================
+local mainFrame = shared.mainFrame; local hudBackground = shared.hudBackground; local screenGui = shared.screenGui
+
+shared.textButton = shared.createTacticalButton("LockToggle", "CORE LOCK: OFF", UDim2.new(0.92, 0, 0, 42)); shared.textButton.TextColor3 = Color3.fromRGB(255, 60, 60); shared.textButton.Parent = hudBackground
+shared.switchButton = shared.createTacticalButton("PartSwitch", "AIM MOD: HEAD", UDim2.new(0.92, 0, 0, 32)); shared.switchButton.Parent = hudBackground
+shared.extendButton = shared.createTacticalButton("ExtendToggle", "[ + ]", UDim2.new(0, 32, 0, 32)); shared.extendButton.Position = UDim2.new(0, -38, 0.5, -16); shared.extendButton.Parent = mainFrame
+
+local subPanel = Instance.new("Frame")
+subPanel.Name = "SubPanel"; subPanel.Size = UDim2.new(1.15, 0, 2.10, 0); subPanel.Position = UDim2.new(0, 0, -0.55, 0); subPanel.BackgroundColor3 = Color3.fromRGB(4, 4, 8); subPanel.BackgroundTransparency = 1; subPanel.Visible = false; subPanel.Parent = mainFrame
+table.insert(shared.themeBackgrounds, subPanel)
+
+local subCorner = Instance.new("UICorner"); subCorner.CornerRadius = UDim.new(0, 8); subCorner.Parent = subPanel
+shared.subStroke = Instance.new("UIStroke"); shared.subStroke.Thickness = 2.0; shared.subStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; shared.subStroke.Parent = subPanel
+
+shared.closeExtrasButton = shared.createTacticalButton("CloseExtras", "[ ◀ ]", UDim2.new(0, 32, 0, 32))
+shared.closeExtrasButton.Position = UDim2.new(-1.45, 0, 0.5, -16); shared.closeExtrasButton.TextColor3 = Color3.fromRGB(255, 120, 120); shared.closeExtrasButton.Visible = false; shared.closeExtrasButton.Parent = mainFrame
+
+local uiListLayout = Instance.new("UIListLayout"); uiListLayout.Padding = UDim.new(0, 6); uiListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center; uiListLayout.VerticalAlignment = Enum.VerticalAlignment.Center; uiListLayout.Parent = hudBackground
+local subListLayout = Instance.new("UIListLayout"); subListLayout.Padding = UDim.new(0, 4); subListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center; subListLayout.VerticalAlignment = Enum.VerticalAlignment.Center; subListLayout.Parent = subPanel
+
+shared.modeButton = shared.createTacticalButton("ModeToggle", "MODE: PLAYERS", UDim2.new(0.92, 0, 0, 22)); shared.modeButton.Parent = subPanel
+shared.fovToggleButton = shared.createTacticalButton("FovToggle", "FOV: ENGAGED", UDim2.new(0.92, 0, 0, 20)); shared.fovToggleButton.TextColor3 = Color3.fromRGB(0, 255, 255); shared.fovToggleButton.Parent = subPanel
+shared.autoLockButton = shared.createTacticalButton("AutoLockToggle", "AUTOLOCK: OFF", UDim2.new(0.92, 0, 0, 20)); shared.autoLockButton.Parent = subPanel
+
+-- Reordered Toggle Placements (Friend -> Wall -> Team Check Configuration)
+shared.friendCheckButton = shared.createTacticalButton("FriendCheckToggle", "FRIEND CHECK: OFF", UDim2.new(0.92, 0, 0, 20)); shared.friendCheckButton.Parent = subPanel
+shared.wallCheckButton = shared.createTacticalButton("WallCheckToggle", "WALL CHECK: OFF", UDim2.new(0.92, 0, 0, 20)); shared.wallCheckButton.Parent = subPanel
+shared.teamCheckButton = shared.createTacticalButton("TeamCheckToggle", "TEAM CHECK: OFF", UDim2.new(0.92, 0, 0, 20)); shared.teamCheckButton.Parent = subPanel
+
+shared.crosshairToggleButton = shared.createTacticalButton("CrosshairToggle", "CROSSHAIR: ENGAGED", UDim2.new(0.92, 0, 0, 20)); shared.crosshairToggleButton.TextColor3 = Color3.fromRGB(0, 255, 255); shared.crosshairToggleButton.Parent = subPanel
+shared.espMasterButton = shared.createTacticalButton("EspMasterToggle", "TACTICAL ESP: ON", UDim2.new(0.92, 0, 0, 20)); shared.espMasterButton.TextColor3 = Color3.fromRGB(0, 255, 255); shared.espMasterButton.Parent = subPanel
+
+local centerCrosshairContainer = Instance.new("Frame")
+centerCrosshairContainer.Name = "CenterCrosshairContainer"; centerCrosshairContainer.Size = UDim2.new(0, 60, 0, 60); centerCrosshairContainer.AnchorPoint = Vector2.new(0.5, 0.5); centerCrosshairContainer.BackgroundTransparency = 1; centerCrosshairContainer.Visible = shared.crosshairEnabled; centerCrosshairContainer.Parent = screenGui
+local crosshairCircle = Instance.new("Frame")
+crosshairCircle.Size = UDim2.new(0, 10, 0, 10); crosshairCircle.Position = UDim2.new(0.5, 0, 0.5, 0); crosshairCircle.AnchorPoint = Vector2.new(0.5, 0.5); crosshairCircle.BackgroundTransparency = 1; crosshairCircle.Parent = centerCrosshairContainer
+local circleCorner = Instance.new("UICorner"); circleCorner.CornerRadius = UDim.new(1, 0); circleCorner.Parent = crosshairCircle
+local circleStroke = Instance.new("UIStroke"); circleStroke.Thickness = 2; circleStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; circleStroke.Parent = crosshairCircle; table.insert(shared.allStrokes, circleStroke)
+
+local function createSegment(name, size, pos)
+	local line = Instance.new("Frame"); line.Name = name; line.Size = size; line.Position = pos; line.AnchorPoint = Vector2.new(0.5, 0.5); line.BorderSizePixel = 0; line.Parent = centerCrosshairContainer
+	table.insert(shared.crosshairLines, line)
+end
+createSegment("LeftLine", UDim2.new(0, 10, 0, 2), UDim2.new(0.5, -13, 0.5, 0))
+createSegment("RightLine", UDim2.new(0, 10, 0, 2), UDim2.new(0.5, 13, 0.5, 0))
+createSegment("TopLine", UDim2.new(0, 2, 0, 10), UDim2.new(0.5, 0, 0.5, -13))
+createSegment("BottomLine", UDim2.new(0, 2, 0, 10), UDim2.new(0.5, 0, 0.5, 13))
+
+shared.CROSSHAIR_SPIN_SPEED = 90.00 
+
+shared.subPanel = subPanel; shared.centerCrosshairContainer = centerCrosshairContainer
+print("[Part 5/8] Interface Assets Anchored.")
+
+-- ============================================================================
+-- PART 6: SLIDER CONFIGURATIONS & INTERFACE SIZERS
+-- ============================================================================
+local UserInputService = game:GetService("UserInputService")
+local subPanel = shared.subPanel
+
+-- --- SLIDER 1: FOV SIZE SLIDER CONTAINER ---
+local sliderContainer = Instance.new("Frame")
+sliderContainer.Size = UDim2.new(0.92, 0, 0, 32); sliderContainer.BackgroundColor3 = Color3.fromRGB(12, 12, 20); sliderContainer.BackgroundTransparency = 0.15; sliderContainer.Parent = subPanel
+local sCorner = Instance.new("UICorner"); sCorner.CornerRadius = UDim.new(0, 4); sCorner.Parent = sliderContainer
+local containerStroke = Instance.new("UIStroke"); containerStroke.Thickness = 1.5; containerStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; containerStroke.Parent = sliderContainer; table.insert(shared.allStrokes, containerStroke)
+
+local sliderLabel = Instance.new("TextLabel")
+sliderLabel.Size = UDim2.new(1, 0, 0.45, 0); sliderLabel.Position = UDim2.new(0, 0, 0, 2); sliderLabel.BackgroundTransparency = 1
+sliderLabel.Text = "FOV RADIUS: " .. tostring(shared.FOV_RADIUS) .. "px"; sliderLabel.TextColor3 = Color3.fromRGB(240, 240, 255); sliderLabel.TextSize = 9; sliderLabel.Font = Enum.Font.GothamBold; sliderLabel.Parent = sliderContainer
+
+local sliderTrack = Instance.new("Frame")
+sliderTrack.Size = UDim2.new(0.85, 0, 0, 3); sliderTrack.Position = UDim2.new(0.075, 0, 0.75, -2); sliderTrack.BackgroundColor3 = Color3.fromRGB(24, 24, 36); sliderTrack.Parent = sliderContainer
+local sliderFill = Instance.new("Frame")
+local initialPercentage = (shared.FOV_RADIUS - shared.MIN_FOV_LIMIT) / (shared.MAX_FOV_LIMIT - shared.MIN_FOV_LIMIT)
+sliderFill.Size = UDim2.new(initialPercentage, 0, 1, 0); sliderFill.Parent = sliderTrack
+
+local sliderActive = false
+local function updateSlider(pos)
+	local sizeX = sliderTrack.AbsoluteSize.X
+	local pct = math.clamp(pos.X - sliderTrack.AbsolutePosition.X, 0, sizeX) / sizeX
+	local rad = math.floor(shared.MIN_FOV_LIMIT + (pct * (shared.MAX_FOV_LIMIT - shared.MIN_FOV_LIMIT)))
+	shared.FOV_RADIUS = rad; sliderFill.Size = UDim2.new(pct, 0, 1, 0); sliderLabel.Text = "FOV RADIUS: " .. tostring(rad) .. "px"
+end
+sliderContainer.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then sliderActive = true; updateSlider(i.Position) end end)
+UserInputService.InputChanged:Connect(function(i) if sliderActive and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then updateSlider(i.Position) end end)
+UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then sliderActive = false end end)
+
+-- --- SLIDER 2: SMOOTHNESS SLIDER CONTAINER ---
+local smoothContainer = Instance.new("Frame")
+smoothContainer.Size = UDim2.new(0.92, 0, 0, 32); smoothContainer.BackgroundColor3 = Color3.fromRGB(12, 12, 20); smoothContainer.BackgroundTransparency = 0.15; smoothContainer.Parent = subPanel
+local smoothCorner = Instance.new("UICorner"); smoothCorner.CornerRadius = UDim.new(0, 4); smoothCorner.Parent = smoothContainer
+local smoothStroke = Instance.new("UIStroke"); smoothStroke.Thickness = 1.5; smoothStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; smoothStroke.Parent = smoothContainer; table.insert(shared.allStrokes, smoothStroke)
+
+local smoothLabel = Instance.new("TextLabel")
+smoothLabel.Size = UDim2.new(1, 0, 0.45, 0); smoothLabel.Position = UDim2.new(0, 0, 0, 2); smoothLabel.BackgroundTransparency = 1
+smoothLabel.Text = "SMOOTHNESS: " .. string.format("%.2f", shared.SMOOTHNESS_VALUE); smoothLabel.TextColor3 = Color3.fromRGB(240, 240, 255); smoothLabel.TextSize = 9; smoothLabel.Font = Enum.Font.GothamBold; smoothLabel.Parent = smoothContainer
+
+local smoothTrack = Instance.new("Frame")
+smoothTrack.Size = UDim2.new(0.85, 0, 0, 3); smoothTrack.Position = UDim2.new(0.075, 0, 0.75, -2); smoothTrack.BackgroundColor3 = Color3.fromRGB(24, 24, 36); smoothTrack.Parent = smoothContainer
+local smoothFill = Instance.new("Frame")
+local initialSmoothPct = shared.SMOOTHNESS_VALUE / shared.MAX_SMOOTHNESS_LIMIT
+smoothFill.Size = UDim2.new(initialSmoothPct, 0, 1, 0); smoothFill.Parent = smoothTrack
+
+local smoothActive = false
+local function updateSmoothSlider(pos)
+	local sizeX = smoothTrack.AbsoluteSize.X
+	local pct = math.clamp(pos.X - smoothTrack.AbsolutePosition.X, 0, sizeX) / sizeX
+	local smoothness = pct * shared.MAX_SMOOTHNESS_LIMIT
+	shared.SMOOTHNESS_VALUE = smoothness; smoothFill.Size = UDim2.new(pct, 0, 1, 0)
+	smoothLabel.Text = "SMOOTHNESS: " .. string.format("%.2f", smoothness)
+end
+smoothContainer.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then smoothActive = true; updateSmoothSlider(i.Position) end end)
+UserInputService.InputChanged:Connect(function(i) if smoothActive and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then updateSmoothSlider(i.Position) end end)
+UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then smoothActive = false end end)
+
+-- --- SLIDER 3: PREDICTION SLIDER CONTAINER ---
+local predContainer = Instance.new("Frame")
+predContainer.Size = UDim2.new(0.92, 0, 0, 32); predContainer.BackgroundColor3 = Color3.fromRGB(12, 12, 20); predContainer.BackgroundTransparency = 0.15; predContainer.Parent = subPanel
+local predCorner = Instance.new("UICorner"); predCorner.CornerRadius = UDim.new(0, 4); predCorner.Parent = predContainer
+local predStroke = Instance.new("UIStroke"); predStroke.Thickness = 1.5; predStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; predStroke.Parent = predContainer; table.insert(shared.allStrokes, predStroke)
+
+local predLabel = Instance.new("TextLabel")
+predLabel.Size = UDim2.new(1, 0, 0.45, 0); predLabel.Position = UDim2.new(0, 0, 0, 2); predLabel.BackgroundTransparency = 1
+predLabel.Text = "PREDICTION: " .. string.format("%.2f", shared.PREDICTION_VALUE); predLabel.TextColor3 = Color3.fromRGB(240, 240, 255); predLabel.TextSize = 9; predLabel.Font = Enum.Font.GothamBold; predLabel.Parent = predContainer
+
+local predTrack = Instance.new("Frame")
+predTrack.Size = UDim2.new(0.85, 0, 0, 3); predTrack.Position = UDim2.new(0.075, 0, 0.75, -2); predTrack.BackgroundColor3 = Color3.fromRGB(24, 24, 36); predTrack.Parent = predContainer
+local predFill = Instance.new("Frame")
+local initialPredPct = shared.PREDICTION_VALUE / shared.MAX_PREDICTION_LIMIT
+predFill.Size = UDim2.new(initialPredPct, 0, 1, 0); predFill.Parent = predTrack
+
+local predActive = false
+local function updatePredSlider(pos)
+	local sizeX = predTrack.AbsoluteSize.X
+	local pct = math.clamp(pos.X - predTrack.AbsolutePosition.X, 0, sizeX) / sizeX
+	local prediction = pct * shared.MAX_PREDICTION_LIMIT
+	shared.PREDICTION_VALUE = prediction; predFill.Size = UDim2.new(pct, 0, 1, 0)
+	predLabel.Text = "PREDICTION: " .. string.format("%.2f", prediction)
+end
+predContainer.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then predActive = true; updatePredSlider(i.Position) end end)
+UserInputService.InputChanged:Connect(function(i) if predActive and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then updatePredSlider(i.Position) end end)
+UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then predActive = false end end)
+
+shared.sliderFill = sliderFill
+shared.smoothFill = smoothFill
+shared.predFill = predFill
+print("[Part 6/8] Slider Configurator Subroutines Assembled.")
+
+-- ============================================================================
+-- PART 7: DRAG OBJECT PHYSICS & RETICLE GEOMETRY
+-- ============================================================================
+local UserInputService = game:GetService("UserInputService")
+local mainFrame = shared.mainFrame; local hudBackground = shared.hudBackground; local screenGui = shared.screenGui
+
+shared.dragHandleButton = Instance.new("TextButton")
+shared.dragHandleButton.Size = UDim2.new(0.92, 0, 0, 28); shared.dragHandleButton.BackgroundColor3 = Color3.fromRGB(20, 20, 32)
+shared.dragHandleButton.Text = ":: HOLD TO DRAG HUD ::"; shared.dragHandleButton.TextColor3 = Color3.fromRGB(150, 150, 170); shared.dragHandleButton.TextSize = 9.5; shared.dragHandleButton.Font = Enum.Font.GothamBold; shared.dragHandleButton.AutoButtonColor = false; shared.dragHandleButton.Parent = hudBackground
+local dCorner = Instance.new("UICorner"); dCorner.CornerRadius = UDim.new(0, 4); dCorner.Parent = shared.dragHandleButton
+local stroke8 = Instance.new("UIStroke"); stroke8.Thickness = 1.5; stroke8.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; stroke8.Parent = shared.dragHandleButton; table.insert(shared.allStrokes, stroke8)
+
+shared.fovCircle = Instance.new("Frame")
+shared.fovCircle.Size = UDim2.new(0, shared.FOV_RADIUS * 2, 0, shared.FOV_RADIUS * 2)
+shared.fovCircle.AnchorPoint = Vector2.new(0.5, 0.5); shared.fovCircle.BackgroundTransparency = 1; shared.fovCircle.Visible = shared.fovEnabled; shared.fovCircle.Parent = screenGui
+local cCorner = Instance.new("UICorner"); cCorner.CornerRadius = UDim.new(1, 0); cCorner.Parent = screenGui
+shared.circleStroke = Instance.new("UIStroke"); shared.circleStroke.Thickness = 1.5; shared.circleStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; shared.circleStroke.Transparency = 0.4; shared.circleStroke.Parent = shared.fovCircle
+
+local dragging, dragInput, dragStart, sPos
+shared.dragHandleButton.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then dragging = true; dragStart = i.Position; sPos = mainFrame.Position; i.Changed:Connect(function() if i.UserInputState == Enum.UserInputState.End then dragging = false end end) end end)
+UserInputService.InputChanged:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then dragInput = i end end)
+game:GetService("RunService").RenderStepped:Connect(function() if dragging and dragInput then local d = dragInput.Position - dragStart; mainFrame.Position = UDim2.new(sPos.X.Scale, sPos.X.Offset + d.X, sPos.Y.Scale, sPos.Y.Offset + d.Y) end end)
+
+print("[Part 7/8] Physics Drag Pipelines Coupled.")
+
+-- ============================================================================
+-- PART 8: OPERATIONAL INTERFACE PIPELINE & CORE CHROMA SYNC
+-- ============================================================================
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local camera = workspace.CurrentCamera
+local mainFrame = shared.mainFrame; local subPanel = shared.subPanel; local centerCrosshairContainer = shared.centerCrosshairContainer; local sliderFill = shared.sliderFill; local smoothFill = shared.smoothFill; local predFill = shared.predFill
+
+RunService.RenderStepped:Connect(function()
+	local absoluteCenter = UDim2.new(0, camera.ViewportSize.X / 2, 0, camera.ViewportSize.Y / 2)
+	shared.fovCircle.Size = UDim2.new(0, shared.FOV_RADIUS * 2, 0, shared.FOV_RADIUS * 2); shared.fovCircle.Position = absoluteCenter
+	
+	centerCrosshairContainer.Position = absoluteCenter
+	if shared.CROSSHAIR_SPIN_SPEED and shared.CROSSHAIR_SPIN_SPEED > 0 then
+		centerCrosshairContainer.Rotation = (tick() * shared.CROSSHAIR_SPIN_SPEED) % 360
+	else
+		centerCrosshairContainer.Rotation = 0
+	end
+	
+	shared.updateEspSectors()
+	
+	local dynamicColor = Color3.fromHSV((tick() * shared.RAINBOW_SPEED) % 1, 0.95, 1)
+	shared.hudStroke.Color = dynamicColor; shared.subStroke.Color = dynamicColor; shared.circleStroke.Color = dynamicColor
+	if sliderFill then sliderFill.BackgroundColor3 = dynamicColor end
+	if smoothFill then smoothFill.BackgroundColor3 = dynamicColor end
+	if predFill then predFill.BackgroundColor3 = dynamicColor end
+	for _, stroke in ipairs(shared.allStrokes) do stroke.Color = dynamicColor end
+	for _, segment in ipairs(shared.crosshairLines) do segment.BackgroundColor3 = dynamicColor end
+end)
+
+shared.lockConnection = RunService.RenderStepped:Connect(function()
+	if shared.locked and shared.target and shared.target.Parent and shared.target.Parent:FindFirstChildOfClass("Humanoid") and shared.target.Parent:FindFirstChildOfClass("Humanoid").Health > 0 and not shared.isWallBetween(shared.target) then
+		local basePosition = shared.target.Position
+		
+		if shared.PREDICTION_VALUE > 0.01 and shared.target.Parent:FindFirstChild("HumanoidRootPart") then
+			local velocity = shared.target.Parent.HumanoidRootPart.Velocity
+			local distance = (camera.CFrame.Position - basePosition).Magnitude
+			basePosition = basePosition + (velocity * (distance / 1000) * shared.PREDICTION_VALUE)
+		end
+		
+		local targetCFrame = CFrame.new(camera.CFrame.Position, basePosition)
+		
+		if shared.SMOOTHNESS_VALUE <= 0.01 then
+			camera.CFrame = targetCFrame
+		else
+			local alphaFactor = math.clamp(1 - (shared.SMOOTHNESS_VALUE * 0.92), 0.01, 1)
+			camera.CFrame = camera.CFrame:Lerp(targetCFrame, alphaFactor)
+		end
+	else
+		if shared.locked then shared.locked = false; shared.target = nil; shared.textButton.Text = "CORE LOCK: OFF"; shared.textButton.TextColor3 = Color3.fromRGB(255, 60, 60) end
+		if shared.autolockEnabled and not shared.autolockCooldownActive then
+			local t = shared.getClosestTarget()
+			if t then shared.target = t; shared.locked = true; shared.textButton.Text = "CORE LOCK: ACTIVE"; shared.textButton.TextColor3 = Color3.fromRGB(0, 255, 150) end
+		end
+	end
+end)
+
+shared.extendButton.Activated:Connect(function()
+	shared.menuExpanded = true
+	subPanel.Visible = true
+	shared.closeExtrasButton.Visible = true
+	TweenService:Create(subPanel, TweenInfo.new(0.35, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {Position = UDim2.new(-1.25, 0, -0.55, 0), BackgroundTransparency = 0.25}):Play()
+	TweenService:Create(shared.extendButton, TweenInfo.new(0.20, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 1, TextTransparency = 1}):Play()
+	task.delay(0.2, function() shared.extendButton.Visible = false end)
+end)
+
+shared.closeExtrasButton.Activated:Connect(function()
+	shared.menuExpanded = false
+	shared.extendButton.Visible = true
+	TweenService:Create(subPanel, TweenInfo.new(0.30, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), {Position = UDim2.new(0, 0, -0.55, 0), BackgroundTransparency = 1}):Play()
+	TweenService:Create(shared.extendButton, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0.15, TextTransparency = 0}):Play()
+	task.delay(0.3, function() if not shared.menuExpanded then subPanel.Visible = false; shared.closeExtrasButton.Visible = false end end)
+end)
+
+shared.textButton.Activated:Connect(function()
+	if shared.locked then
+		shared.locked = false; shared.target = nil
+		shared.textButton.Text = "CORE LOCK: OFF"; shared.textButton.TextColor3 = Color3.fromRGB(255, 60, 60)
+		
+		shared.autolockCooldownActive = true
+		task.delay(shared.COOLDOWN_DURATION, function()
+			shared.autolockCooldownActive = false
 		end)
 	else
-		autoLockButton.Text = "AUTOLOCK: OFF" autoLockButton.TextColor3 = Color3.fromRGB(255, 50, 50)
-		if autolockConnection then autolockConnection:Disconnect() autolockConnection = nil end
-		autolockCooldownActive = false
+		local acquired = shared.getClosestTarget()
+		if acquired then
+			shared.target = acquired; shared.locked = true
+			shared.textButton.Text = "CORE LOCK: ACTIVE"; shared.textButton.TextColor3 = Color3.fromRGB(0, 255, 150)
+		end
 	end
 end)
 
-wallCheckButton.MouseButton1Click:Connect(function()
-	wallCheckEnabled = not wallCheckEnabled stopLockOnTarget()
-	if wallCheckEnabled then wallCheckButton.Text = "WALL CHECK: ON" wallCheckButton.TextColor3 = Color3.fromRGB(0, 255, 100)
-	else wallCheckButton.Text = "WALL CHECK: OFF" wallCheckButton.TextColor3 = Color3.fromRGB(255, 50, 50) end
+shared.switchButton.Activated:Connect(function()
+	shared.targetPartIndex = (shared.targetPartIndex % #shared.targetPartList) + 1
+	local currentBone = shared.targetPartList[shared.targetPartIndex]
+	shared.targetPartName = currentBone
+	shared.switchButton.Text = "AIM MOD: " .. currentBone:upper()
 end)
 
-friendCheckButton.MouseButton1Click:Connect(function()
-	friendCheckEnabled = not friendCheckEnabled stopLockOnTarget()
-	if friendCheckEnabled then friendCheckButton.Text = "FRIEND CHECK: ON" friendCheckButton.TextColor3 = Color3.fromRGB(0, 255, 100)
-	else friendCheckButton.Text = "FRIEND CHECK: OFF" friendCheckButton.TextColor3 = Color3.fromRGB(255, 50, 50) end
+shared.modeButton.Activated:Connect(function()
+	if shared.targetMode == "Players" then shared.targetMode = "NPCs" elseif shared.targetMode = "NPCs" then shared.targetMode = "All" else shared.targetMode = "Players" end
+	shared.modeButton.Text = "MODE: " .. shared.targetMode:upper()
 end)
+
+shared.fovToggleButton.Activated:Connect(function()
+	shared.fovEnabled = not shared.fovEnabled; shared.fovCircle.Visible = shared.fovEnabled
+	shared.fovToggleButton.Text = shared.fovEnabled and "FOV: ENGAGED" or "FOV: DISABLED"
+	shared.fovToggleButton.TextColor3 = shared.fovEnabled and Color3.fromRGB(0, 255, 255) or Color3.fromRGB(255, 120, 120)
+end)
+
+shared.autoLockButton.Activated:Connect(function()
+	shared.autolockEnabled = not shared.autolockEnabled
+	shared.autoLockButton.Text = shared.autolockEnabled and "AUTOLOCK: ON" or "AUTOLOCK: OFF"
+	shared.autoLockButton.TextColor3 = shared.autolockEnabled and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(245, 245, 255)
+end)
+
+shared.friendCheckButton.Activated:Connect(function()
+	shared.friendCheckEnabled = not shared.friendCheckEnabled
+	shared.friendCheckButton.Text = shared.friendCheckEnabled and "FRIEND CHECK: ON" or "FRIEND CHECK: OFF"
+	shared.friendCheckButton.TextColor3 = shared.friendCheckEnabled and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(245, 245, 255)
+end)
+
+shared.wallCheckButton.Activated:Connect(function()
+	shared.wallCheckEnabled = not shared.wallCheckEnabled
+	shared.wallCheckButton.Text = shared.wallCheckEnabled and "WALL CHECK: ON" or "WALL CHECK: OFF"
+	shared.wallCheckButton.TextColor3 = shared.wallCheckEnabled and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(245, 245, 255)
+end)
+
+shared.teamCheckButton.Activated:Connect(function()
+	shared.teamCheckEnabled = not shared.teamCheckEnabled
+	shared.teamCheckButton.Text = shared.teamCheckEnabled and "TEAM CHECK: ON" or "TEAM CHECK: OFF"
+	shared.teamCheckButton.TextColor3 = shared.teamCheckEnabled and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(245, 245, 255)
+end)
+
+shared.crosshairToggleButton.Activated:Connect(function()
+	shared.crosshairEnabled = not shared.crosshairEnabled; centerCrosshairContainer.Visible = shared.crosshairEnabled
+	shared.crosshairToggleButton.Text = shared.crosshairEnabled and "CROSSHAIR: ENGAGED" or "CROSSHAIR: OFF"
+	shared.crosshairToggleButton.TextColor3 = shared.crosshairEnabled and Color3.fromRGB(0, 255, 255) or Color3.fromRGB(255, 120, 120)
+end)
+
+shared.espMasterButton.Activated:Connect(function()
+	shared.espMasterEnabled = not shared.espMasterEnabled
+	shared.espMasterButton.Text = shared.espMasterEnabled and "TACTICAL ESP: ON" or "TACTICAL ESP: OFF"
+	shared.espMasterButton.TextColor3 = shared.espMasterEnabled and Color3.fromRGB(0, 255, 255) or Color3.fromRGB(255, 120, 120)
+end)
+
+game:GetService("RunService").Heartbeat:Connect(function()
+	local localChar = game:GetService("Players").LocalPlayer.Character
+	if localChar then
+		local excludeList = {localChar, camera}
+		if shared.friendCheckEnabled or shared.teamCheckEnabled then
+			for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
+				if p ~= game:GetService("Players").LocalPlayer and p.Character then
+					local isFriend = shared.friendCheckEnabled and game:GetService("Players").LocalPlayer:IsFriendsWith(p.UserId)
+					local isTeammate = shared.teamCheckEnabled and game:GetService("Players").LocalPlayer.Team and p.Team and (game:GetService("Players").LocalPlayer.Team == p.Team)
+					if isFriend or isTeammate then
+						table.insert(excludeList, p.Character)
+					end
+				end
+			end
+		end
+		shared.wallCheckParams.FilterDescendantsInstances = excludeList
+	end
+end)
+
+print("[Part 8/8] Master Environment Kernels Booted and Synchronized Successfully.")
