@@ -13,9 +13,8 @@ shared.RAINBOW_SPEED = 0.20
 shared.FOV_RADIUS = 120 
 shared.MAX_FOV_LIMIT = 300
 shared.MIN_FOV_LIMIT = 10
-shared.COOLDOWN_DURATION = 2.0 -- Strict 2-second manual unlocking cooldown timer configuration
+shared.COOLDOWN_DURATION = 2.0 
 
--- Configuration slider limits
 shared.SMOOTHNESS_VALUE = 0.00 
 shared.MAX_SMOOTHNESS_LIMIT = 1.00
 shared.PREDICTION_VALUE = 0.00
@@ -23,7 +22,7 @@ shared.MAX_PREDICTION_LIMIT = 10.00
 
 shared.locked = false; shared.autolockEnabled = false 
 shared.friendCheckEnabled = false; shared.wallCheckEnabled = false; shared.teamCheckEnabled = false
-shared.wallEspEnabled = false -- Dedicated independent ESP line-of-sight tracking variable
+shared.wallEspEnabled = false 
 shared.crosshairEnabled = true; shared.espMasterEnabled = true 
 shared.menuExpanded = false 
 shared.targetMode = "Players" 
@@ -50,10 +49,6 @@ print("[Part 1/8] Initial Configurations Configured.")
 -- ============================================================================
 -- PART 2: PROXIMITY TARGETING ALGORITHMS & LIMB RESOLUTION
 -- ============================================================================
-local Players = game:GetService("Players")
-local camera = workspace.CurrentCamera
-local localPlayer = Players.LocalPlayer
-
 function shared.resolveTargetPart(char)
 	if not char then return nil end
 	local name = shared.targetPartName
@@ -94,7 +89,6 @@ function shared.getClosestTarget()
 			if onScreen and (Vector2.new(sPos.X, sPos.Y) - centerScreen).Magnitude < shared.FOV_RADIUS then
 				local dist = (part.Position - localChar.HumanoidRootPart.Position).Magnitude
 				if dist < shortestDistance then 
-					-- Camera scanning patch: Sight checking is bypassed unless WALL CHECK is activated
 					if shared.wallCheckEnabled and shared.isWallBetween(part) then 
 						return 
 					end
@@ -123,91 +117,57 @@ end
 print("[Part 2/8] Focus Target System Stacked.")
 
 -- ============================================================================
--- PART 3: HORIZONTAL TELEMETRY ESP SECTOR DRAWING ENGINE
+-- PART 3: LOW-OVERHEAD NATIVE DRAWING API ESP SUB-ENGINE
 -- ============================================================================
-local Players = game:GetService("Players")
-local CoreGui = game:GetService("CoreGui")
-local RunService = game:GetService("RunService")
-local localPlayer = Players.LocalPlayer
+local function createDrawingLine()
+	local line = Drawing.new("Line")
+	line.Visible = false
+	line.Color = Color3.fromRGB(255, 60, 60)
+	line.Thickness = 1.5
+	line.Transparency = 1
+	return line
+end
 
-local function round(num, numDecimalPlaces)
-	local mult = 10^(numDecimalPlaces or 0)
-	return math.floor(num * mult + 0.5) / mult
+local function createDrawingText()
+	local text = Drawing.new("Text")
+	text.Visible = false
+	text.Color = Color3.fromRGB(255, 60, 60)
+	text.Size = 14
+	text.Center = true
+	text.Outline = true
+	text.Transparency = 1
+	return text
 end
 
 function shared.clearTargetEsp()
-	for _, c in pairs(CoreGui:GetChildren()) do
-		if string.sub(c.Name, -4) == "_ESP" then
-			c:Destroy()
+	for pObj, data in pairs(shared.activeEspStorage) do
+		if data.lines then
+			for _, line in ipairs(data.lines) do
+				line.Visible = false
+			end
+		end
+		if data.label then
+			data.label.Visible = false
 		end
 	end
-	table.clear(shared.activeEspStorage)
 end
 
 function shared.makeEsp(plr)
-	if not plr or plr == localPlayer or not plr.Character then return end
-	local char = plr.Character
-	local identifier = plr.Name .. "_ESP"
+	if not plr or plr == localPlayer then return end
+	if shared.activeEspStorage[plr] then return end
 	
-	local existing = CoreGui:FindFirstChild(identifier)
-	if existing then existing:Destroy() end
-	
-	local ESPholder = Instance.new("Folder")
-	ESPholder.Name = identifier
-	ESPholder.Parent = CoreGui
-	
-	local characterHighlight = Instance.new("Highlight")
-	characterHighlight.Name = "EspOutline"
-	characterHighlight.Adornee = char
-	characterHighlight.FillTransparency = 0.85
-	characterHighlight.OutlineTransparency = 0.15
-	characterHighlight.Parent = ESPholder
-
-	local adornments = {}
-	
-	for _, part in pairs(char:GetChildren()) do
-		if part:IsA("BasePart") then
-			local box = Instance.new("BoxHandleAdornment")
-			box.Name = part.Name
-			box.Parent = ESPholder
-			box.Adornee = part
-			box.AlwaysOnTop = true
-			box.ZIndex = 10
-			box.Size = part.Size
-			box.Transparency = 0.35
-			table.insert(adornments, box)
-		end
+	local lines = {}
+	for i = 1, 12 do
+		table.insert(lines, createDrawingLine())
 	end
 	
-	local head = char:FindFirstChild("Head")
-	if head then
-		local BillboardGui = Instance.new("BillboardGui")
-		local TextLabel = Instance.new("TextLabel")
-		BillboardGui.Adornee = head
-		BillboardGui.Name = "EspBillboard"
-		BillboardGui.Parent = ESPholder
-		BillboardGui.Size = UDim2.new(0, 100, 0, 150)
-		BillboardGui.StudsOffset = Vector3.new(0, 1, 0)
-		BillboardGui.AlwaysOnTop = true
-		
-		TextLabel.Parent = BillboardGui
-		TextLabel.BackgroundTransparency = 1
-		TextLabel.Position = UDim2.new(0, 0, 0, -50)
-		TextLabel.Size = UDim2.new(0, 100, 0, 100)
-		TextLabel.Font = Enum.Font.SourceSansSemibold
-		TextLabel.TextSize = 16
-		TextLabel.TextStrokeTransparency = 0
-		TextLabel.TextYAlignment = Enum.TextYAlignment.Bottom
-		TextLabel.ZIndex = 10
-		
-		shared.activeEspStorage[plr] = {
-			folder = ESPholder,
-			label = TextLabel,
-			highlight = characterHighlight,
-			boxes = adornments,
-			characterLink = char
-		}
-	end
+	local label = createDrawingText()
+	
+	shared.activeEspStorage[plr] = {
+		lines = lines,
+		label = label,
+		playerLink = plr
+	}
 end
 
 function shared.updateEspSectors()
@@ -218,7 +178,7 @@ function shared.updateEspSectors()
 	
 	for _, p in ipairs(Players:GetPlayers()) do
 		if p ~= localPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChildOfClass("Humanoid") then
-			if not shared.activeEspStorage[p] or shared.activeEspStorage[p].characterLink ~= p.Character then
+			if not shared.activeEspStorage[p] then
 				shared.makeEsp(p)
 			end
 		end
@@ -228,12 +188,13 @@ function shared.updateEspSectors()
 	local currentRainbowColor = Color3.fromHSV((tick() * shared.RAINBOW_SPEED) % 1, 0.95, 1)
 	
 	for plr, data in pairs(shared.activeEspStorage) do
-		local char = data.characterLink
-		local folder = data.folder
+		local char = plr.Character
+		local lines = data.lines
+		local label = data.label
 		
-		if not char.Parent or not folder.Parent then
-			if folder then folder:Destroy() end
-			shared.activeEspStorage[plr] = nil
+		if not plr.Parent or not char or not char.Parent then
+			for _, line in ipairs(lines) do line.Visible = false end
+			label.Visible = false
 			continue
 		end
 		
@@ -241,48 +202,99 @@ function shared.updateEspSectors()
 		local root = char:FindFirstChild("HumanoidRootPart")
 		
 		if hum and root and localRoot and hum.Health > 0 then
-			local distance = math.floor((localRoot.Position - root.Position).Magnitude)
-			data.label.Text = string.format("Name: %s | HP: %s | Studs: %d", plr.Name, string.format("%.1f", hum.Health), distance)
+			local size = char:GetExtentsSize()
+			local cframe = root.CFrame
+			local halfX, halfY, halfZ = size.X / 2, size.Y / 2, size.Z / 2
 			
-			local assignedColor = Color3.fromRGB(255, 60, 60) 
+			local corners3D = {
+				cframe * Vector3.new(-halfX,  halfY, -halfZ), cframe * Vector3.new( halfX,  halfY, -halfZ),
+				cframe * Vector3.new(-halfX,  halfY,  halfZ), cframe * Vector3.new( halfX,  halfY,  halfZ),
+				cframe * Vector3.new(-halfX, -halfY, -halfZ), cframe * Vector3.new( halfX, -halfY, -halfZ),
+				cframe * Vector3.new(-halfX, -halfY,  halfZ), cframe * Vector3.new( halfX, -halfY,  halfZ),
+			}
 			
-			local isTeammate = localPlayer.Team and plr.Team and (localPlayer.Team == plr.Team)
-			local isFriend = localPlayer:IsFriendsWith(plr.UserId)
+			local corners2D = {}
+			local allOnScreen = true
 			
-			if isTeammate then
-				assignedColor = currentRainbowColor 
-			elseif isFriend then
-				assignedColor = Color3.fromRGB(60, 255, 60) 
-			elseif shared.wallEspEnabled and shared.isWallBetween(root) then
-				assignedColor = Color3.fromRGB(0, 120, 255) 
+			for i, vec3D in ipairs(corners3D) do
+				local vec2D, onScreen = camera:WorldToViewportPoint(vec3D)
+				if not onScreen then allOnScreen = false break end
+				corners2D[i] = Vector2.new(vec2D.X, vec2D.Y)
 			end
 			
-			if data.highlight then
-				data.highlight.OutlineColor = assignedColor
-				data.highlight.FillColor = assignedColor
-			end
-
-			data.label.TextColor3 = assignedColor
-			
-			for _, boxHandle in ipairs(data.boxes) do
-				if boxHandle and boxHandle.Parent then
-					boxHandle.Color3 = assignedColor
+			if allOnScreen then
+				local assignedColor = Color3.fromRGB(255, 60, 60)
+				local isTeammate = localPlayer.Team and plr.Team and (localPlayer.Team == plr.Team)
+				local isFriend = localPlayer:IsFriendsWith(plr.UserId)
+				
+				if isTeammate then
+					assignedColor = currentRainbowColor
+				elseif isFriend then
+					assignedColor = Color3.fromRGB(60, 255, 60)
+				elseif shared.wallEspEnabled and shared.isWallBetween(root) then
+					assignedColor = Color3.fromRGB(0, 120, 255)
 				end
+				
+				local connections = {
+					{1, 2}, {2, 4}, {4, 3}, {3, 1},
+					{5, 6}, {6, 8}, {8, 7}, {7, 5},
+					{1, 5}, {2, 6}, {3, 7}, {4, 8}
+				}
+				
+				for index, pair in ipairs(connections) do
+					local lineDraw = lines[index]
+					lineDraw.From = corners2D[pair]
+					lineDraw.To = corners2D[pair]
+					lineDraw.Color = assignedColor
+					lineDraw.Visible = true
+				end
+				
+				local head = char:FindFirstChild("Head")
+				if head then
+					local headPos, headOnScreen = camera:WorldToViewportPoint(head.Position + Vector3.new(0, 1.5, 0))
+					if headOnScreen then
+						local distance = math.floor((localRoot.Position - root.Position).Magnitude)
+						label.Text = string.format("%s | HP: %d | %dstuds", plr.Name, math.floor(hum.Health), distance)
+						label.Position = Vector2.new(headPos.X, headPos.Y)
+						label.Color = assignedColor
+						label.Visible = true
+					else
+						label.Visible = false
+					end
+				end
+			else
+				for _, lineDraw in ipairs(lines) do lineDraw.Visible = false end
+				label.Visible = false
 			end
 		else
-			if folder then folder:Destroy() end
-			shared.activeEspStorage[plr] = nil
+			for _, lineDraw in ipairs(lines) do lineDraw.Visible = false end
+			label.Visible = false
 		end
 	end
 end
-print("[Part 3/8] Telemetry Filtering Engines Active.")
+
+-- Hook existing players instantly upon execution
+for _, player in ipairs(Players:GetPlayers()) do
+	shared.makeEsp(player)
+end
+
+Players.PlayerAdded:Connect(function(p)
+	shared.makeEsp(p)
+end)
+
+Players.PlayerRemoving:Connect(function(p)
+	if shared.activeEspStorage[p] then
+		local data = shared.activeEspStorage[p]
+		for _, line in ipairs(data.lines) do line.Visible = false line:Remove() end
+		if data.label then data.label.Visible = false data.label:Remove() end
+		shared.activeEspStorage[p] = nil
+	end
+end)
+print("[Part 3/8] Native Canvas Drawing Filters Deployed Successfully.")
 
 -- ============================================================================
 -- PART 4: MAIN ROUNDED HUD BASE PANEL SETUP
 -- ============================================================================
-local Players = game:GetService("Players")
-local localPlayer = Players.LocalPlayer
-
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "QuantumCamlockGui"; screenGui.ResetOnSpawn = false; screenGui.IgnoreGuiInset = true; screenGui.Parent = localPlayer:WaitForChild("PlayerGui")
 local mainFrame = Instance.new("Frame")
@@ -352,7 +364,6 @@ crosshairCircle.Size = UDim2.new(0, 10, 0, 10); crosshairCircle.Position = UDim2
 local circleCorner = Instance.new("UICorner"); circleCorner.CornerRadius = UDim.new(1, 0); circleCorner.Parent = crosshairCircle
 local circleStroke = Instance.new("UIStroke"); circleStroke.Thickness = 2; circleStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; circleStroke.Parent = crosshairCircle; table.insert(shared.allStrokes, circleStroke)
 
--- Micro Round Central Reticle Point Configuration (2x2 Circular Dot Optimization)
 local centralReticleDot = Instance.new("Frame")
 centralReticleDot.Name = "CenterReticleDot"
 centralReticleDot.Size = UDim2.new(0, 2, 0, 2) 
@@ -384,10 +395,8 @@ print("[Part 5/8] Interface Assets Anchored.")
 -- ============================================================================
 -- PART 6: SLIDER CONFIGURATIONS & INTERFACE SIZERS
 -- ============================================================================
-local UserInputService = game:GetService("UserInputService")
 local subPanel = shared.subPanel
 
--- --- SLIDER 1: FOV SIZE SLIDER CONTAINER ---
 local sliderContainer = Instance.new("Frame")
 sliderContainer.Size = UDim2.new(0.92, 0, 0, 32); sliderContainer.BackgroundColor3 = Color3.fromRGB(12, 12, 20); sliderContainer.BackgroundTransparency = 0.15; sliderContainer.Parent = subPanel
 local sCorner = Instance.new("UICorner"); sCorner.CornerRadius = UDim.new(0, 4); sCorner.Parent = sliderContainer
@@ -414,7 +423,6 @@ sliderContainer.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserIn
 UserInputService.InputChanged:Connect(function(i) if sliderActive and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then updateSlider(i.Position) end end)
 UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then sliderActive = false end end)
 
--- --- SLIDER 2: SMOOTHNESS SLIDER CONTAINER ---
 local smoothContainer = Instance.new("Frame")
 smoothContainer.Size = UDim2.new(0.92, 0, 0, 32); smoothContainer.BackgroundColor3 = Color3.fromRGB(12, 12, 20); smoothContainer.BackgroundTransparency = 0.15; smoothContainer.Parent = subPanel
 local smoothCorner = Instance.new("UICorner"); smoothCorner.CornerRadius = UDim.new(0, 4); smoothCorner.Parent = smoothContainer
@@ -442,7 +450,6 @@ smoothContainer.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserIn
 UserInputService.InputChanged:Connect(function(i) if smoothActive and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then updateSmoothSlider(i.Position) end end)
 UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then smoothActive = false end end)
 
--- --- SLIDER 3: PREDICTION SLIDER CONTAINER ---
 local predContainer = Instance.new("Frame")
 predContainer.Size = UDim2.new(0.92, 0, 0, 32); predContainer.BackgroundColor3 = Color3.fromRGB(12, 12, 20); predContainer.BackgroundTransparency = 0.15; predContainer.Parent = subPanel
 local predCorner = Instance.new("UICorner"); predCorner.CornerRadius = UDim.new(0, 4); predCorner.Parent = predContainer
@@ -478,7 +485,6 @@ print("[Part 6/8] Slider Configurator Subroutines Assembled.")
 -- ============================================================================
 -- PART 7: DRAG OBJECT PHYSICS & RETICLE GEOMETRY
 -- ============================================================================
-local UserInputService = game:GetService("UserInputService")
 local mainFrame = shared.mainFrame; local hudBackground = shared.hudBackground; local screenGui = shared.screenGui
 
 shared.dragHandleButton = Instance.new("TextButton")
@@ -498,16 +504,13 @@ shared.circleStroke.Thickness = 1.5; shared.circleStroke.ApplyStrokeMode = Enum.
 local dragging, dragInput, dragStart, sPos
 shared.dragHandleButton.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then dragging = true; dragStart = i.Position; sPos = mainFrame.Position; i.Changed:Connect(function() if i.UserInputState == Enum.UserInputState.End then dragging = false end end) end end)
 UserInputService.InputChanged:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then dragInput = i end end)
-game:GetService("RunService").RenderStepped:Connect(function() if dragging and dragInput then local d = dragInput.Position - dragStart; mainFrame.Position = UDim2.new(sPos.X.Scale, sPos.X.Offset + d.X, sPos.Y.Scale, sPos.Y.Offset + d.Y) end end)
+RunService.RenderStepped:Connect(function() if dragging and dragInput then local d = dragInput.Position - dragStart; mainFrame.Position = UDim2.new(sPos.X.Scale, sPos.X.Offset + d.X, sPos.Y.Scale, sPos.Y.Offset + d.Y) end end)
 
 print("[Part 7/8] Physics Drag Pipelines Coupled.")
 
 -- ============================================================================
 -- PART 8: OPERATIONAL INTERFACE PIPELINE & CORE CHROMA SYNC
 -- ============================================================================
-local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
-local camera = workspace.CurrentCamera
 local mainFrame = shared.mainFrame; local subPanel = shared.subPanel; local centerCrosshairContainer = shared.centerCrosshairContainer; local sliderFill = shared.sliderFill; local smoothFill = shared.smoothFill; local predFill = shared.predFill
 
 RunService.RenderStepped:Connect(function()
@@ -536,7 +539,6 @@ shared.lockConnection = RunService.RenderStepped:Connect(function()
 	local hasTarget = shared.target and shared.target.Parent
 	local isAlive = hasTarget and shared.target.Parent:FindFirstChildOfClass("Humanoid") and shared.target.Parent:FindFirstChildOfClass("Humanoid").Health > 0
 	
-	-- Isolated locking verification: Only drop target if WALL CHECK is active AND target is hidden
 	local wallFailure = false
 	if shared.wallCheckEnabled and shared.target and shared.isWallBetween(shared.target) then
 		wallFailure = true
@@ -676,15 +678,15 @@ shared.espMasterButton.Activated:Connect(function()
 	shared.espMasterButton.TextColor3 = shared.espMasterEnabled and Color3.fromRGB(0, 255, 255) or Color3.fromRGB(255, 120, 120)
 end)
 
-game:GetService("RunService").Heartbeat:Connect(function()
-	local localChar = game:GetService("Players").LocalPlayer.Character
+RunService.Heartbeat:Connect(function()
+	local localChar = localPlayer.Character
 	if localChar then
 		local excludeList = {localChar, camera}
 		if shared.friendCheckEnabled or shared.teamCheckEnabled then
-			for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
-				if p ~= game:GetService("Players").LocalPlayer and p.Character then
-					local isFriend = shared.friendCheckEnabled and game:GetService("Players").LocalPlayer:IsFriendsWith(p.UserId)
-					local isTeammate = shared.teamCheckEnabled and game:GetService("Players").LocalPlayer.Team and p.Team and (game:GetService("Players").LocalPlayer.Team == p.Team)
+			for _, p in ipairs(Players:GetPlayers()) do
+				if p ~= localPlayer and p.Character then
+					local isFriend = shared.friendCheckEnabled and localPlayer:IsFriendsWith(p.UserId)
+					local isTeammate = shared.teamCheckEnabled and localPlayer.Team and p.Team and (localPlayer.Team == p.Team)
 					if isFriend or isTeammate then
 						table.insert(excludeList, p.Character)
 					end
