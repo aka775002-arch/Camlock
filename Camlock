@@ -195,7 +195,7 @@ function shared.getClosestTarget()
 	end
 	if shared.targetMode == "NPCs" or shared.targetMode == "All" then
 		for _, d in ipairs(workspace:GetDescendants()) do 
-			if d:IsA("Model") and d:FindFirstChildOfClass("Humanoid") and d ~= localChar bottlenecks and not Players:GetPlayerFromCharacter(d) then 
+			if d:IsA("Model") and d:FindFirstChildOfClass("Humanoid") and d ~= localChar and not Players:GetPlayerFromCharacter(d) then 
 				checkChar(d, nil) 
 			end 
 		end
@@ -285,7 +285,7 @@ function shared.makeEsp(plr)
 end
 
 function shared.updateEspSectors()
-if not shared.espMasterEnabled then
+	if not shared.espMasterEnabled then
 shared.clearTargetEsp()
 return
 end
@@ -369,7 +369,6 @@ local mainFrame = shared.mainFrame; local hudBackground = shared.hudBackground; 
 shared.textButton = shared.createTacticalButton("LockToggle", "CORE LOCK: OFF", UDim2.new(0.92, 0, 0, 42)); shared.textButton.TextColor3 = Color3.fromRGB(255, 60, 60); shared.textButton.Parent = hudBackground
 shared.switchButton = shared.createTacticalButton("PartSwitch", "AIM MOD: HEAD", UDim2.new(0.92, 0, 0, 32)); shared.switchButton.Parent = hudBackground
 shared.extendButton = shared.createTacticalButton("ExtendToggle", "[ + ]", UDim2.new(0, 32, 0, 32)); shared.extendButton.Position = UDim2.new(0, -38, 0.5, -16); shared.extendButton.Parent = mainFrame
--- EXTENDED SCROLL: CanvasSize parameter increased to 460 to allow scrolling down further safely
 local subPanel = Instance.new("ScrollingFrame")
 subPanel.Name = "SubPanel"; subPanel.Size = UDim2.new(1.15, 0, 1.85, 0); subPanel.Position = UDim2.new(0, 0, -0.42, 0); subPanel.BackgroundColor3 = Color3.fromRGB(4, 4, 8); subPanel.BackgroundTransparency = 1; subPanel.Visible = false; subPanel.Parent = mainFrame
 subPanel.CanvasSize = UDim2.new(0, 0, 0, 460); subPanel.ScrollBarThickness = 2; subPanel.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 150)
@@ -423,7 +422,6 @@ print("[Part 5/8] Interface Assets Anchored.")
 -- ============================================================================
 -- PART 6: SLIDER CONFIGURATIONS & INTERFACE SIZERS
 -- ============================================================================
-local UserInputService = game:GetService("UserInputService")
 local subPanel = shared.subPanel
 -- --- SLIDER 1: FOV SIZE SLIDER CONTAINER ---
 local sliderContainer = Instance.new("Frame")
@@ -528,7 +526,6 @@ print("[Part 6/8] Slider Configurator Subroutines Assembled.")
 -- ============================================================================
 -- PART 7: DRAG OBJECT PHYSICS & RETICLE GEOMETRY
 -- ============================================================================
-local UserInputService = game:GetService("UserInputService")
 local mainFrame = shared.mainFrame; local hudBackground = shared.hudBackground; local screenGui = shared.screenGui
 shared.dragHandleButton = Instance.new("TextButton")
 shared.dragHandleButton.Size = UDim2.new(0.92, 0, 0, 28); shared.dragHandleButton.BackgroundColor3 = Color3.fromRGB(20, 20, 32)
@@ -545,13 +542,11 @@ shared.circleStroke.Thickness = 1.5; shared.circleStroke.ApplyStrokeMode = Enum.
 local dragging, dragInput, dragStart, sPos
 shared.dragHandleButton.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then dragging = true; dragStart = i.Position; sPos = mainFrame.Position; i.Changed:Connect(function() if i.UserInputState == Enum.UserInputState.End then dragging = false end end) end end)
 UserInputService.InputChanged:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then dragInput = i end end)
-game:GetService("RunService").RenderStepped:Connect(function() if dragging and dragInput then local d = dragInput.Position - dragStart; mainFrame.Position = UDim2.new(sPos.X.Scale, sPos.X.Offset + d.X, sPos.Y.Scale, sPos.Y.Offset + d.Y) end end)
+RunService.RenderStepped:Connect(function() if dragging and dragInput then local d = dragInput.Position - dragStart; mainFrame.Position = UDim2.new(sPos.X.Scale, sPos.X.Offset + d.X, sPos.Y.Scale, sPos.Y.Offset + d.Y) end end)
 print("[Part 7/8] Physics Drag Pipelines Coupled.")
 -- ============================================================================
 -- PART 8: OPERATIONAL INTERFACE PIPELINE & CORE CHROMA SYNC
 -- ============================================================================
-local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
 local camera = workspace.CurrentCamera
 local mainFrame = shared.mainFrame; local subPanel = shared.subPanel; local centerCrosshairContainer = shared.centerCrosshairContainer; local sliderFill = shared.sliderFill; local smoothFill = shared.smoothFill; local predFill = shared.predFill; local hitboxFill = shared.hitboxFill
 RunService.RenderStepped:Connect(function()
@@ -720,15 +715,17 @@ shared.hitboxToggleButton.Text = shared.hitboxExpanded and "EXPAND HITBOX: ON" o
 shared.hitboxToggleButton.TextColor3 = shared.hitboxExpanded and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(245, 245, 255)
 shared.refreshHitboxState()
 end)
-game:GetService("RunService").Heartbeat:Connect(function()
-local localChar = game:GetService("Players").LocalPlayer.Character
+-- Safe dynamic isolation task thread to update exclusion filter parameters smoothly
+task.spawn(function()
+while task.wait(0.5) do
+local localChar = localPlayer.Character
 if localChar then
 local excludeList = {localChar, camera}
 if shared.friendCheckEnabled or shared.teamCheckEnabled then
-for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
-if p ~= game:GetService("Players").LocalPlayer and p.Character then
-local isFriend = shared.friendCheckEnabled and game:GetService("Players").LocalPlayer:IsFriendsWith(p.UserId)
-local isTeammate = shared.teamCheckEnabled and game:GetService("Players").LocalPlayer.Team and p.Team and (game:GetService("Players").LocalPlayer.Team == p.Team)
+for _, p in ipairs(Players:GetPlayers()) do
+if p ~= localPlayer and p.Character then
+local isFriend = shared.friendCheckEnabled and localPlayer:IsFriendsWith(p.UserId)
+local isTeammate = shared.teamCheckEnabled and localPlayer.Team and p.Team and (localPlayer.Team == p.Team)
 if isFriend or isTeammate then
 table.insert(excludeList, p.Character)
 end
@@ -736,6 +733,7 @@ end
 end
 end
 shared.wallCheckParams.FilterDescendantsInstances = excludeList
+end
 end
 end)
 print("[Part 8/8] Master Environment Kernels Booted and Synchronized Successfully.")
