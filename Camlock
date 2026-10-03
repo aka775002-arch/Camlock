@@ -218,6 +218,18 @@ function shared.clearTargetEsp()
 	table.clear(shared.activeEspStorage)
 end
 
+-- Telemetry parser to actively check character structures for inventory weapons
+local function getEquippedWeapon(plr)
+	local char = plr.Character
+	if char then
+		local tool = char:FindFirstChildOfClass("Tool")
+		if tool then
+			return tostring(tool.Name):upper()
+		end
+	end
+	return "UNARMED"
+end
+
 function shared.makeEsp(plr)
 	if not plr or plr == localPlayer or not plr.Character then return end
 	local char = plr.Character
@@ -260,32 +272,30 @@ function shared.makeEsp(plr)
 		BillboardGui.Adornee = head
 		BillboardGui.Name = "EspBillboard"
 		BillboardGui.Parent = ESPholder
-		BillboardGui.Size = UDim2.new(0, 100, 0, 150)
-		BillboardGui.StudsOffset = Vector3.new(0, 1, 0)
+		BillboardGui.Size = UDim2.new(0, 150, 0, 150)
+		BillboardGui.StudsOffset = Vector3.new(0, 1.5, 0)
 		BillboardGui.AlwaysOnTop = true
 		
 		TextLabel.Parent = BillboardGui
 		TextLabel.BackgroundTransparency = 1
-		TextLabel.Position = UDim2.new(0, 0, 0, -50)
-		TextLabel.Size = UDim2.new(0, 100, 0, 100)
+		TextLabel.Position = UDim2.new(0, -25, 0, -50)
+		TextLabel.Size = UDim2.new(0, 200, 0, 100)
 		TextLabel.Font = Enum.Font.SourceSansSemibold
 		TextLabel.TextSize = 16
 		TextLabel.TextStrokeTransparency = 0
-		TextLabel.TextYAlignment = Enum.TextYAlignment.Bottom
-		TextLabel.ZIndex = 10
-		
-		shared.activeEspStorage[plr] = {
-			folder = ESPholder,
-			label = TextLabel,
-			highlight = characterHighlight,
-			boxes = adornments,
-			characterLink = char
-		}
-	end
+TextLabel.TextYAlignment = Enum.TextYAlignment.Bottom
+TextLabel.ZIndex = 10
+shared.activeEspStorage[plr] = {
+folder = ESPholder,
+label = TextLabel,
+highlight = characterHighlight,
+boxes = adornments,
+characterLink = char
+}
 end
-
+end
 function shared.updateEspSectors()
-	if not shared.espMasterEnabled then
+if not shared.espMasterEnabled then
 shared.clearTargetEsp()
 return
 end
@@ -310,7 +320,9 @@ local hum = char:FindFirstChildOfClass("Humanoid")
 local root = char:FindFirstChild("HumanoidRootPart")
 if hum and root and localRoot and hum.Health > 0 then
 local distance = math.floor((localRoot.Position - root.Position).Magnitude)
-data.label.Text = string.format("Name: %s | HP: %s | Studs: %d", plr.Name, string.format("%.1f", hum.Health), distance)
+local currentWeapon = getEquippedWeapon(plr)
+-- Multi-line formatting processing tool items stacked above target configurations
+data.label.Text = string.format("[%s]\nName: %s | HP: %s | Studs: %d", currentWeapon, plr.Name, string.format("%.1f", hum.Health), distance)
 local assignedColor = Color3.fromRGB(255, 60, 60)
 local isTeammate = localPlayer.Team and plr.Team and (localPlayer.Team == plr.Team)
 local isFriend = localPlayer:IsFriendsWith(plr.UserId)
@@ -422,6 +434,7 @@ print("[Part 5/8] Interface Assets Anchored.")
 -- ============================================================================
 -- PART 6: SLIDER CONFIGURATIONS & INTERFACE SIZERS
 -- ============================================================================
+local UserInputService = game:GetService("UserInputService")
 local subPanel = shared.subPanel
 -- --- SLIDER 1: FOV SIZE SLIDER CONTAINER ---
 local sliderContainer = Instance.new("Frame")
@@ -715,7 +728,7 @@ shared.hitboxToggleButton.Text = shared.hitboxExpanded and "EXPAND HITBOX: ON" o
 shared.hitboxToggleButton.TextColor3 = shared.hitboxExpanded and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(245, 245, 255)
 shared.refreshHitboxState()
 end)
--- Safe dynamic isolation task thread to update exclusion filter parameters smoothly
+-- Safe standalone isolation thread loop processing player filter updates smoothly
 task.spawn(function()
 while task.wait(0.5) do
 local localChar = localPlayer.Character
