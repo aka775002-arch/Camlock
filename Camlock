@@ -195,7 +195,7 @@ function shared.getClosestTarget()
 	end
 	if shared.targetMode == "NPCs" or shared.targetMode == "All" then
 		for _, d in ipairs(workspace:GetDescendants()) do 
-			if d:IsA("Model") and d:FindFirstChildOfClass("Humanoid") and d ~= localChar and not Players:GetPlayerFromCharacter(d) then 
+			if d:IsA("Model") and d:FindFirstChildOfClass("Humanoid") and d ~= localChar bottlenecks and not Players:GetPlayerFromCharacter(d) then 
 				checkChar(d, nil) 
 			end 
 		end
@@ -285,7 +285,7 @@ function shared.makeEsp(plr)
 end
 
 function shared.updateEspSectors()
-	if not shared.espMasterEnabled then
+if not shared.espMasterEnabled then
 shared.clearTargetEsp()
 return
 end
@@ -369,10 +369,10 @@ local mainFrame = shared.mainFrame; local hudBackground = shared.hudBackground; 
 shared.textButton = shared.createTacticalButton("LockToggle", "CORE LOCK: OFF", UDim2.new(0.92, 0, 0, 42)); shared.textButton.TextColor3 = Color3.fromRGB(255, 60, 60); shared.textButton.Parent = hudBackground
 shared.switchButton = shared.createTacticalButton("PartSwitch", "AIM MOD: HEAD", UDim2.new(0.92, 0, 0, 32)); shared.switchButton.Parent = hudBackground
 shared.extendButton = shared.createTacticalButton("ExtendToggle", "[ + ]", UDim2.new(0, 32, 0, 32)); shared.extendButton.Position = UDim2.new(0, -38, 0.5, -16); shared.extendButton.Parent = mainFrame
--- Shortened scroll container maintaining wide easy-tap dimensions
+-- EXTENDED SCROLL: CanvasSize parameter increased to 460 to allow scrolling down further safely
 local subPanel = Instance.new("ScrollingFrame")
 subPanel.Name = "SubPanel"; subPanel.Size = UDim2.new(1.15, 0, 1.85, 0); subPanel.Position = UDim2.new(0, 0, -0.42, 0); subPanel.BackgroundColor3 = Color3.fromRGB(4, 4, 8); subPanel.BackgroundTransparency = 1; subPanel.Visible = false; subPanel.Parent = mainFrame
-subPanel.CanvasSize = UDim2.new(0, 0, 0, 350); subPanel.ScrollBarThickness = 2; subPanel.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 150)
+subPanel.CanvasSize = UDim2.new(0, 0, 0, 460); subPanel.ScrollBarThickness = 2; subPanel.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 150)
 table.insert(shared.themeBackgrounds, subPanel)
 local subCorner = Instance.new("UICorner"); subCorner.CornerRadius = UDim.new(0, 8); subCorner.Parent = subPanel
 shared.subStroke = Instance.new("UIStroke"); shared.subStroke.Thickness = 2.0; shared.subStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; shared.subStroke.Parent = subPanel
@@ -380,7 +380,7 @@ shared.closeExtrasButton = shared.createTacticalButton("CloseExtras", "[ ◀ ]",
 shared.closeExtrasButton.Position = UDim2.new(-1.45, 0, 0.5, -16); shared.closeExtrasButton.TextColor3 = Color3.fromRGB(255, 120, 120); shared.closeExtrasButton.Visible = false; shared.closeExtrasButton.Parent = mainFrame
 local uiListLayout = Instance.new("UIListLayout"); uiListLayout.Padding = UDim.new(0, 6); uiListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center; uiListLayout.VerticalAlignment = Enum.VerticalAlignment.Center; uiListLayout.Parent = hudBackground
 local subListLayout = Instance.new("UIListLayout"); subListLayout.Padding = UDim.new(0, 4); subListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center; subListLayout.VerticalAlignment = Enum.VerticalAlignment.Top; subListLayout.Parent = subPanel
-local subPadding = Instance.new("UIPadding"); subPadding.PaddingTop = UDim.new(0, 6); subPadding.Parent = subPanel
+local subPadding = Instance.new("UIPadding"); subPadding.PaddingTop = UDim.new(0, 6); subPadding.PaddingBottom = UDim.new(0, 20); subPadding.Parent = subPanel
 shared.modeButton = shared.createTacticalButton("ModeToggle", "MODE: PLAYERS", UDim2.new(0.92, 0, 0, 22)); shared.modeButton.Parent = subPanel
 shared.fovToggleButton = shared.createTacticalButton("FovToggle", "FOV: ENGAGED", UDim2.new(0.92, 0, 0, 20)); shared.fovToggleButton.TextColor3 = Color3.fromRGB(0, 255, 255); shared.fovToggleButton.Parent = subPanel
 shared.autoLockButton = shared.createTacticalButton("AutoLockToggle", "AUTOLOCK: OFF", UDim2.new(0.92, 0, 0, 20)); shared.autoLockButton.Parent = subPanel
@@ -390,7 +390,6 @@ shared.teamCheckButton = shared.createTacticalButton("TeamCheckToggle", "TEAM CH
 shared.wallEspButton = shared.createTacticalButton("WallEspToggle", "WALL ESP: OFF", UDim2.new(0.92, 0, 0, 20)); shared.wallEspButton.Parent = subPanel
 shared.crosshairToggleButton = shared.createTacticalButton("CrosshairToggle", "CROSSHAIR: ENGAGED", UDim2.new(0.92, 0, 0, 20)); shared.crosshairToggleButton.TextColor3 = Color3.fromRGB(0, 255, 255); shared.crosshairToggleButton.Parent = subPanel
 shared.espMasterButton = shared.createTacticalButton("EspMasterToggle", "TACTICAL ESP: ON", UDim2.new(0.92, 0, 0, 20)); shared.espMasterButton.TextColor3 = Color3.fromRGB(0, 255, 255); shared.espMasterButton.Parent = subPanel
--- Hitbox Functional Switch Interface Button
 shared.hitboxToggleButton = shared.createTacticalButton("HitboxToggle", "EXPAND HITBOX: OFF", UDim2.new(0.92, 0, 0, 20)); shared.hitboxToggleButton.Parent = subPanel
 local centerCrosshairContainer = Instance.new("Frame")
 centerCrosshairContainer.Name = "CenterCrosshairContainer"; centerCrosshairContainer.Size = UDim2.new(0, 60, 0, 60); centerCrosshairContainer.AnchorPoint = Vector2.new(0.5, 0.5); centerCrosshairContainer.BackgroundTransparency = 1; centerCrosshairContainer.Visible = shared.crosshairEnabled; centerCrosshairContainer.Parent = screenGui
@@ -565,7 +564,6 @@ else
 centerCrosshairContainer.Rotation = 0
 end
 shared.updateEspSectors()
--- Continuous active update check loop forced every frame execution
 shared.refreshHitboxState()
 local dynamicColor = Color3.fromHSV((tick() * shared.RAINBOW_SPEED) % 1, 0.95, 1)
 shared.hudStroke.Color = dynamicColor; shared.subStroke.Color = dynamicColor; shared.circleStroke.Color = dynamicColor
@@ -716,7 +714,6 @@ if not shared.espMasterEnabled then shared.clearTargetEsp() end
 shared.espMasterButton.Text = shared.espMasterEnabled and "TACTICAL ESP: ON" or "TACTICAL ESP: OFF"
 shared.espMasterButton.TextColor3 = shared.espMasterEnabled and Color3.fromRGB(0, 255, 255) or Color3.fromRGB(255, 120, 120)
 end)
--- Hitbox Expander Listener Integration
 shared.hitboxToggleButton.Activated:Connect(function()
 shared.hitboxExpanded = not shared.hitboxExpanded
 shared.hitboxToggleButton.Text = shared.hitboxExpanded and "EXPAND HITBOX: ON" or "EXPAND HITBOX: OFF"
