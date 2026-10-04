@@ -1,5 +1,5 @@
 -- ============================================================================
--- PART 1: CORE CONFIGURATIONS & GLOBAL FRAMEWORK STATES
+-- PART 1: CORE SCREEN CONTAINER SYSTEM (BULLETPROOF INITIALIZATION)
 -- ============================================================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -10,6 +10,23 @@ local CoreGui = game:GetService("CoreGui")
 local localPlayer = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 
+-- Wipe duplicate legacy runtime windows out of layout history
+for _, item in pairs(CoreGui:GetChildren()) do
+	if item.Name == "QuantumCamlockGui" or item.Name == "CenterCrosshairContainer" or string.sub(item.Name, -4) == "_ESP" then
+		item:Destroy()
+	end
+end
+
+-- Absolute Top-Level Global GUI Instance
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "QuantumCamlockGui"
+screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
+screenGui.Parent = CoreGui
+
+-- ============================================================================
+-- PART 2: GLOBAL CHEAT CONFIGURATION STATES
+-- ============================================================================
 shared.RAINBOW_SPEED = 0.20 
 shared.FOV_RADIUS = 120 
 shared.MAX_FOV_LIMIT = 300
@@ -58,13 +75,8 @@ shared.wallCheckParams.IgnoreWater = true
 shared.allStrokes = {}; shared.crosshairLines = {} 
 shared.activeEspStorage = {}; shared.themeBackgrounds = {}
 local textSyncList = {}
+local colorManagedButtons = {} 
 local customKeybindRegistry = {}
-
-for _, item in pairs(CoreGui:GetChildren()) do
-	if item.Name == "QuantumCamlockGui" or item.Name == "CenterCrosshairContainer" or string.sub(item.Name, -4) == "_ESP" then
-		item:Destroy()
-	end
-end
 
 function shared.isWallBetween(part)
 	local res = workspace:Raycast(camera.CFrame.Position, part.Position - camera.CFrame.Position, shared.wallCheckParams)
@@ -72,7 +84,7 @@ function shared.isWallBetween(part)
 end
 
 -- ============================================================================
--- PART 2: PROXIMITY TARGETING ALGORITHMS & LIMB RESOLUTION
+-- PART 3: PROXIMITY TARGETING ALGORITHMS & LIMB RESOLUTION
 -- ============================================================================
 function shared.resolveTargetPart(char)
 	if not char then return nil end
@@ -117,14 +129,12 @@ function shared.revertAllHitboxes()
 	table.clear(shared.originalHitboxData)
 end
 
--- FIXED TEAM CHECK FUNCTION: Robust logic to accurately cross-examine Player objects and Team values
 local function isTeammate(char)
 	if not shared.teamCheckEnabled then return false end
 	local pObj = Players:GetPlayerFromCharacter(char)
 	if pObj and localPlayer.Team and pObj.Team and localPlayer.Team == pObj.Team then
 		return true
 	end
-	-- Native fallback checks for generic asymmetric script properties
 	if pObj and pObj ~= localPlayer and tostring(pObj.Team) == tostring(localPlayer.Team) and localPlayer.Team ~= nil then
 		return true
 	end
@@ -168,7 +178,6 @@ function shared.applyHitboxExpansion(char)
 			}
 		end
 		
-		-- FIXED HITBOX EXPANDER: Enforces true, functional BasePart conversions instantly recognized by physics engines
 		activePart.Size = Vector3.new(shared.hitboxSizeValue, shared.hitboxSizeValue, shared.hitboxSizeValue)
 		activePart.Transparency = 0.65
 		activePart.CanCollide = false
@@ -263,27 +272,12 @@ function shared.getClosestTarget()
 end
 
 -- ============================================================================
--- PART 3: HORIZONTAL TELEMETRY ESP SECTOR DRAWING ENGINE
+-- PART 4: HORIZONTAL TELEMETRY ESP SECTOR DRAWING ENGINE
 -- ============================================================================
 function shared.clearTargetEsp()
-	for _, c in pairs(CoreGui:GetChildren()) do
-		if string.sub(c.Name, -4) == "_ESP" then
-			c:Destroy()
-		end
-	end
-	table.clear(shared.activeEspStorage)
+for _, c in pairs(CoreGui:GetChildren()) do if string.sub(c.Name, -4) == "_ESP" then c:Destroy() end end
+table.clear(shared.activeEspStorage)
 end
-
-local function getEquippedWeapon(char)
-	if char then
-		local tool = char:FindFirstChildOfClass("Tool")
-		if tool then
-			return tostring(tool.Name):upper()
-		end
-	end
-	return "UNARMED"
-end
-
 function shared.makeEsp(obj, isPlayer)
 if not obj or obj == localPlayer or obj == localPlayer.Character then return end
 local char = isPlayer and obj.Character or obj
@@ -292,25 +286,14 @@ local identifier = (isPlayer and obj.Name or obj.Name .. "_" .. tostring(obj:Get
 local existing = CoreGui:FindFirstChild(identifier)
 if existing then existing:Destroy() end
 local ESPholder = Instance.new("Folder")
-ESPholder.Name = identifier
-ESPholder.Parent = CoreGui
+ESPholder.Name = identifier; ESPholder.Parent = CoreGui
 local characterHighlight = Instance.new("Highlight")
-characterHighlight.Name = "EspOutline"
-characterHighlight.Adornee = char
-characterHighlight.FillTransparency = 0.85
-characterHighlight.OutlineTransparency = 0.15
-characterHighlight.Parent = ESPholder
+characterHighlight.Adornee = char; characterHighlight.FillTransparency = 0.85; characterHighlight.OutlineTransparency = 0.15; characterHighlight.Parent = ESPholder
 local adornments = {}
 for _, part in pairs(char:GetChildren()) do
 if part:IsA("BasePart") then
 local box = Instance.new("BoxHandleAdornment")
-box.Name = part.Name
-box.Parent = ESPholder
-box.Adornee = part
-box.AlwaysOnTop = true
-box.ZIndex = 10
-box.Size = part.Size
-box.Transparency = 0.35
+box.Parent = ESPholder; box.Adornee = part; box.AlwaysOnTop = true; box.ZIndex = 10; box.Size = part.Size; box.Transparency = 0.35
 table.insert(adornments, box)
 end
 end
@@ -318,201 +301,110 @@ local head = char:FindFirstChild("Head")
 if head then
 local BillboardGui = Instance.new("BillboardGui")
 local TextLabel = Instance.new("TextLabel")
-BillboardGui.Adornee = head
-BillboardGui.Name = "EspBillboard"
-BillboardGui.Parent = ESPholder
-BillboardGui.Size = UDim2.new(0, 150, 0, 150)
-BillboardGui.StudsOffset = Vector3.new(0, 1.5, 0)
-BillboardGui.AlwaysOnTop = true
-TextLabel.Parent = BillboardGui
-TextLabel.BackgroundTransparency = 1
-TextLabel.Position = UDim2.new(0, -25, 0, -50)
-TextLabel.Size = UDim2.new(0, 200, 0, 100)
-TextLabel.Font = Enum.Font.SourceSansSemibold
-TextLabel.TextSize = 16
-TextLabel.TextStrokeTransparency = 0
-TextLabel.TextYAlignment = Enum.TextYAlignment.Bottom
-TextLabel.ZIndex = 10
-shared.activeEspStorage[obj] = {
-folder = ESPholder,
-label = TextLabel,
-highlight = characterHighlight,
-boxes = adornments,
-characterLink = char,
-isPlayerType = isPlayer
-}
+BillboardGui.Adornee = head; BillboardGui.Parent = ESPholder; BillboardGui.Size = UDim2.new(0, 150, 0, 150); BillboardGui.StudsOffset = Vector3.new(0, 1.5, 0); BillboardGui.AlwaysOnTop = true
+TextLabel.Parent = BillboardGui; TextLabel.BackgroundTransparency = 1; TextLabel.Position = UDim2.new(0, -25, 0, -50)
+TextLabel.Size = UDim2.new(0, 200, 0, 100); TextLabel.Font = Enum.Font.SourceSansSemibold; TextLabel.TextSize = 16; TextLabel.TextStrokeTransparency = 0; TextLabel.TextYAlignment = Enum.TextYAlignment.Bottom
+shared.activeEspStorage[obj] = {folder = ESPholder, label = TextLabel, highlight = characterHighlight, boxes = adornments, characterLink = char, isPlayerType = isPlayer}
 end
 end
 function shared.updateEspSectors()
-if not shared.espMasterEnabled then
-shared.clearTargetEsp()
-return
-end
+if not shared.espMasterEnabled then shared.clearTargetEsp() return end
 if shared.targetMode == "Players" or shared.targetMode == "All" then
 for _, p in ipairs(Players:GetPlayers()) do
 if p ~= localPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChildOfClass("Humanoid") then
-if not shared.activeEspStorage[p] or shared.activeEspStorage[p].characterLink ~= p.Character then
-shared.makeEsp(p, true)
-end
+if not shared.activeEspStorage[p] or shared.activeEspStorage[p].characterLink ~= p.Character then shared.makeEsp(p, true) end
 end
 end
 end
 if shared.targetMode == "NPCs" or shared.targetMode == "All" then
 for _, d in ipairs(workspace:GetDescendants()) do
 if d:IsA("Model") and d:FindFirstChild("HumanoidRootPart") and d:FindFirstChildOfClass("Humanoid") and d ~= localPlayer.Character and not Players:GetPlayerFromCharacter(d) then
-if not shared.activeEspStorage[d] or shared.activeEspStorage[d].characterLink ~= d then
-shared.makeEsp(d, false)
-end
+if not shared.activeEspStorage[d] or shared.activeEspStorage[d].characterLink ~= d then shared.makeEsp(d, false) end
 end
 end
 end
 local localRoot = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
 local currentRainbowColor = Color3.fromHSV((tick() * shared.RAINBOW_SPEED) % 1, 0.95, 1)
 for obj, data in pairs(shared.activeEspStorage) do
-local char = data.characterLink
-local folder = data.folder
-local targetModeMismatch = false
+local char = data.characterLink; local folder = data.folder; local targetModeMismatch = false
 if shared.targetMode == "Players" and not data.isPlayerType then targetModeMismatch = true end
 if shared.targetMode == "NPCs" and data.isPlayerType then targetModeMismatch = true end
-if not char.Parent or not folder.Parent or targetModeMismatch then
-if folder then folder:Destroy() end
-shared.activeEspStorage[obj] = nil
-continue
-end
-local hum = char:FindFirstChildOfClass("Humanoid")
-local root = char:FindFirstChild("HumanoidRootPart")
+if not char.Parent or not folder.Parent or targetModeMismatch then if folder then folder:Destroy() end; shared.activeEspStorage[obj] = nil; continue end
+local hum = char:FindFirstChildOfClass("Humanoid"); local root = char:FindFirstChild("HumanoidRootPart")
 if hum and root and localRoot and hum.Health > 0 then
 local distance = math.floor((localRoot.Position - root.Position).Magnitude)
-local currentWeapon = getEquippedWeapon(char)
-local entityName = data.isPlayerType and obj.Name or char.Name
-data.label.Text = string.format("[%s]\nName: %s | HP: %s | Studs: %d", currentWeapon, entityName, string.format("%.1f", hum.Health), distance)
+data.label.Text = string.format("[%s]\nName: %s | HP: %s | Studs: %d", getEquippedWeapon(char), data.isPlayerType and obj.Name or char.Name, string.format("%.1f", hum.Health), distance)
 local assignedColor = Color3.fromRGB(255, 60, 60)
 if data.isPlayerType then
-local isFriend = localPlayer:IsFriendsWith(obj.UserId)
-if isTeammate(char) then
-assignedColor = currentRainbowColor
-elseif isFriend then
-assignedColor = Color3.fromRGB(60, 255, 60)
-elseif shared.wallEspEnabled and shared.isWallBetween(root) then
-assignedColor = Color3.fromRGB(0, 120, 255)
-end
-else
-assignedColor = Color3.fromRGB(235, 180, 40)
-if shared.wallEspEnabled and shared.isWallBetween(root) then
-assignedColor = Color3.fromRGB(160, 110, 20)
-end
-end
-if data.highlight then
-data.highlight.OutlineColor = assignedColor
-data.highlight.FillColor = assignedColor
-end
+if isTeammate(char) then assignedColor = currentRainbowColor elseif localPlayer:IsFriendsWith(obj.UserId) then assignedColor = Color3.fromRGB(60, 255, 60) elseif shared.wallEspEnabled and shared.isWallBetween(root) then assignedColor = Color3.fromRGB(0, 120, 255) end
+else assignedColor = Color3.fromRGB(235, 180, 40) if shared.wallEspEnabled and shared.isWallBetween(root) then assignedColor = Color3.fromRGB(160, 110, 20) end end
+if data.highlight then data.highlight.OutlineColor = assignedColor; data.highlight.FillColor = assignedColor end
 data.label.TextColor3 = assignedColor
-for _, boxHandle in ipairs(data.boxes) do
-if boxHandle and boxHandle.Parent then
-boxHandle.Color3 = assignedColor
-end
-end
-else
-if folder then folder:Destroy() end
-shared.activeEspStorage[obj] = nil
-end
+for _, boxHandle in ipairs(data.boxes) do if boxHandle and boxHandle.Parent then boxHandle.Color3 = assignedColor end end
+else if folder then folder:Destroy() end; shared.activeEspStorage[obj] = nil end
 end
 end
 -- ============================================================================
--- PART 4: DUAL-PANEL INTERFACE FRAMEWORK
+-- PART 5: EXPANDED WIDER DUAL-PANEL FRAMES (WIDTH ACCELERATED TO 290PX)
 -- ============================================================================
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "QuantumCamlockGui"; screenGui.ResetOnSpawn = false; screenGui.IgnoreGuiInset = true; screenGui.Parent = CoreGui
--- Main Console Panel Container (ZIndex = 5)
+-- Main Anchor expanded to width = 290
 local mainFrame = Instance.new("Frame")
-mainFrame.Name = "MainAnchor"; mainFrame.Size = UDim2.new(0, 225, 0, 165); mainFrame.Position = UDim2.new(0.85, -112, 0.45, -82); mainFrame.BackgroundTransparency = 1; mainFrame.ZIndex = 5; mainFrame.Parent = screenGui
+mainFrame.Name = "MainAnchor"
+mainFrame.Size = UDim2.new(0, 290, 0, 165)
+mainFrame.Position = UDim2.new(0.85, -145, 0.45, -82)
+mainFrame.BackgroundTransparency = 1
+mainFrame.ZIndex = 5
+mainFrame.Parent = screenGui
 local hudBackground = Instance.new("Frame")
 hudBackground.Name = "HUDBackdrop"; hudBackground.Size = UDim2.new(1, 0, 1, 0); hudBackground.BackgroundColor3 = Color3.fromRGB(4, 4, 8); hudBackground.BackgroundTransparency = 0.25; hudBackground.ZIndex = 5; hudBackground.Parent = mainFrame
 table.insert(shared.themeBackgrounds, hudBackground)
 local frameCorner = Instance.new("UICorner"); frameCorner.CornerRadius = UDim.new(0, 8); frameCorner.Parent = hudBackground
 shared.hudStroke = Instance.new("UIStroke"); shared.hudStroke.Thickness = 2.0; shared.hudStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; shared.hudStroke.ZIndex = 5; shared.hudStroke.Parent = hudBackground
--- SCROLLABLE EXTRAS PANEL: Height explicitly matches main dashboard, uses ScrollingFrame layout rules
+-- EXTRAS PANEL: Width expanded to 290, CanvasSize increased to 580 to add bottom scroll padding
 local extrasScrollPanel = Instance.new("ScrollingFrame")
 extrasScrollPanel.Name = "ExtrasPanel"
-extrasScrollPanel.Size = UDim2.new(0, 225, 0, 165)
+extrasScrollPanel.Size = UDim2.new(0, 290, 0, 340)
 extrasScrollPanel.Position = UDim2.new(0, 0, 0, 0)
 extrasScrollPanel.BackgroundColor3 = Color3.fromRGB(4, 4, 8)
 extrasScrollPanel.BackgroundTransparency = 0.25
 extrasScrollPanel.ZIndex = 1
 extrasScrollPanel.Visible = false
-extrasScrollPanel.ScrollBarThickness = 2
-extrasScrollPanel.CanvasSize = UDim2.new(0, 0, 0, 560)
+extrasScrollPanel.ScrollBarThickness = 3
+extrasScrollPanel.CanvasSize = UDim2.new(0, 0, 0, 580) -- Safely extends maximum bottom workspace boundary
 extrasScrollPanel.Parent = mainFrame
 table.insert(shared.themeBackgrounds, extrasScrollPanel)
 local extrasCorner = Instance.new("UICorner"); extrasCorner.CornerRadius = UDim.new(0, 8); extrasCorner.Parent = extrasScrollPanel
 shared.subStroke = Instance.new("UIStroke"); shared.subStroke.Thickness = 2.0; shared.subStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; shared.subStroke.ZIndex = 1; shared.subStroke.Parent = extrasScrollPanel
--- FIXED OUTER LEFT CLOSE BUTTON: Attached directly to MainAnchor so it stays stable on the absolute outer-left edge
+-- FIXED OUTER LEFT CLOSE BUTTON: Re-anchored neatly to accommodate the new wider framework bounds
 local closeExtrasWrap, closeExtrasBtn = Instance.new("Frame"), Instance.new("TextButton")
-closeExtrasWrap.Name = "CloseExtras_Container"; closeExtrasWrap.Size = UDim2.new(0, 32, 0, 32); closeExtrasWrap.Position = UDim2.new(0, -273, 0.5, -16); closeExtrasWrap.BackgroundTransparency = 1; closeExtrasWrap.ZIndex = 3; closeExtrasWrap.Visible = false; closeExtrasWrap.Parent = mainFrame
+closeExtrasWrap.Name = "CloseExtras_Container"; closeExtrasWrap.Size = UDim2.new(0, 32, 0, 32); closeExtrasWrap.Position = UDim2.new(0, -338, 0, 6); closeExtrasWrap.BackgroundTransparency = 1; closeExtrasWrap.ZIndex = 3; closeExtrasWrap.Visible = false; closeExtrasWrap.Parent = mainFrame
 closeExtrasBtn.Name = "CloseExtras"; closeExtrasBtn.Size = UDim2.new(1, 0, 1, 0); closeExtrasBtn.BackgroundColor3 = Color3.fromRGB(12, 12, 20); closeExtrasBtn.TextColor3 = Color3.fromRGB(255, 120, 120); closeExtrasBtn.Text = "[ - ]"; closeExtrasBtn.Font = Enum.Font.GothamBold; closeExtrasBtn.TextSize = 10.5; closeExtrasBtn.AutoButtonColor = false; closeExtrasBtn.ZIndex = 3; closeExtrasBtn.Parent = closeExtrasWrap
 Instance.new("UICorner", closeExtrasBtn).CornerRadius = UDim.new(0, 5)
 local cStroke = Instance.new("UIStroke"); cStroke.Thickness = 1.2; cStroke.Color = Color3.fromRGB(255, 120, 120); cStroke.ZIndex = 3; cStroke.Parent = closeExtrasBtn
 local function linkInputTouch(btn, cb)
-btn.InputBegan:Connect(function(input)
-if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-cb()
+btn.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then cb() end end)
 end
-end)
-end
-function shared.createTacticalButton(name, text, size, isBindable, customParent)
+function shared.createAbsolutePositionedButton(name, text, yOffset, isBindable, customParent, globalStateVar)
 local container = Instance.new("Frame")
-container.Name = name .. "_Container"
-container.Size = size
-container.BackgroundTransparency = 1
-container.ZIndex = customParent and customParent.ZIndex or 5
+container.Name = name .. "_Container"; container.Size = UDim2.new(0.92, 0, 0, 22); container.Position = UDim2.new(0.04, 0, 0, yOffset); container.BackgroundTransparency = 1; container.ZIndex = customParent and customParent.ZIndex or 5
 local btn = Instance.new("TextButton")
-btn.Name = name
-btn.Size = isBindable and UDim2.new(0.74, 0, 1, 0) or UDim2.new(1, 0, 1, 0)
-btn.BackgroundColor3 = Color3.fromRGB(12, 12, 20)
-btn.BackgroundTransparency = 0.15
-btn.TextColor3 = Color3.fromRGB(245, 245, 255)
-btn.Text = text
-btn.TextSize = 10.5
-btn.Font = Enum.Font.GothamBold
-btn.AutoButtonColor = false
-btn.ZIndex = container.ZIndex
-btn.Parent = container
+btn.Name = name; btn.Size = isBindable and UDim2.new(0.78, 0, 1, 0) or UDim2.new(1, 0, 1, 0); btn.BackgroundColor3 = Color3.fromRGB(12, 12, 20); btn.BackgroundTransparency = 0.15; btn.TextColor3 = Color3.fromRGB(245, 245, 255); btn.Text = text; btn.TextSize = 10.5; btn.Font = Enum.Font.GothamBold; btn.AutoButtonColor = false; btn.ZIndex = container.ZIndex; btn.Parent = container
 local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, 5); corner.Parent = btn
 local stroke = Instance.new("UIStroke"); stroke.Thickness = 1.2; stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; stroke.ZIndex = btn.ZIndex; stroke.Parent = btn
 table.insert(shared.allStrokes, stroke)
+if globalStateVar ~= nil then
+table.insert(colorManagedButtons, {buttonObject = btn, targetStateString = globalStateVar})
+end
 local emuSig = Instance.new("BindableEvent")
-emuSig.Name = "TextButtonEventEmulationSignal"
-emuSig.Parent = btn
+emuSig.Name = "TextButtonEventEmulationSignal"; emuSig.Parent = btn
 if isBindable then
 local box = Instance.new("TextBox")
-box.Name = "KeybindBox"
-box.Size = UDim2.new(0.22, 0, 1, 0)
-box.Position = UDim2.new(0.78, 0, 0, 0)
-box.BackgroundColor3 = Color3.fromRGB(8, 8, 14)
-box.BackgroundTransparency = 0.20
-box.TextColor3 = Color3.fromRGB(0, 255, 150)
-box.Text = ""
-box.PlaceholderText = "Bind"
-box.PlaceholderColor3 = Color3.fromRGB(100, 100, 120)
-box.Font = Enum.Font.SourceSansBold
-box.TextSize = 11
-box.ClearTextOnFocus = false
-box.ZIndex = btn.ZIndex
-box.Parent = container
+box.Name = "KeybindBox"; box.Size = UDim2.new(0.18, 0, 1, 0); box.Position = UDim2.new(0.82, 0, 0, 0); box.BackgroundColor3 = Color3.fromRGB(8, 8, 14); box.BackgroundTransparency = 0.20; box.TextColor3 = Color3.fromRGB(0, 255, 150); box.Text = ""; box.PlaceholderText = "Bind"; box.PlaceholderColor3 = Color3.fromRGB(100, 100, 120); box.Font = Enum.Font.SourceSansBold; box.TextSize = 11; box.ClearTextOnFocus = false; box.ZIndex = btn.ZIndex; box.Parent = container
 box.FocusLost:Connect(function()
 local inputKeyStr = box.Text:upper():gsub("%s+", "")
-if inputKeyStr == "" then
-customKeybindRegistry[name] = nil
-return
-end
+if inputKeyStr == "" then customKeybindRegistry[name] = nil return end
 local success, targetCode = pcall(function() return Enum.KeyCode[inputKeyStr] end)
-if success and targetCode then
-customKeybindRegistry[name] = targetCode
-box.Text = targetCode.Name
-else
-box.Text = ""
-customKeybindRegistry[name] = nil
-end
+if success and targetCode then customKeybindRegistry[name] = targetCode; box.Text = targetCode.Name else box.Text = ""; customKeybindRegistry[name] = nil end
 end)
 end
 container.Parent = customParent or hudBackground
@@ -524,59 +416,48 @@ if input.KeyCode ~= Enum.KeyCode.Unknown then
 for actionName, boundKeyCode in pairs(customKeybindRegistry) do
 if input.KeyCode == boundKeyCode then
 local targetBtn = mainFrame:FindFirstChild(actionName, true) or extrasScrollPanel:FindFirstChild(actionName, true)
-if targetBtn and targetBtn:FindFirstChild("TextButtonEventEmulationSignal") then
-targetBtn.TextButtonEventEmulationSignal:Fire()
-end
+if targetBtn and targetBtn:FindFirstChild("TextButtonEventEmulationSignal") then targetBtn.TextButtonEventEmulationSignal:Fire() end
 end
 end
 end
 end)
-shared.mainFrame = mainFrame; shared.hudBackground = hudBackground; shared.screenGui = screenGui; shared.extrasScrollPanel = extrasScrollPanel
-print("[Part 4/8] Layer-Separated Layout Built.")
 -- ============================================================================
--- PART 5: CONFIGURATION UI NODES SETUP & SLIDER ALIGNMENT
+-- PART 6: ABSOLUTE COORDINATE CONFIGURATION ENTITIES MATRIX
 -- ============================================================================
-local mainFrame = shared.mainFrame; local hudBackground = shared.hudBackground; local screenGui = shared.screenGui; local extrasScrollPanel = shared.extrasScrollPanel
-local uiListLayout = Instance.new("UIListLayout"); uiListLayout.Padding = UDim.new(0, 6); uiListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center; uiListLayout.VerticalAlignment = Enum.VerticalAlignment.Center; uiListLayout.Parent = hudBackground
-local extListLayout = Instance.new("UIListLayout"); extListLayout.Padding = UDim.new(0, 5); extListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center; extListLayout.VerticalAlignment = Enum.VerticalAlignment.Top; extListLayout.Parent = extrasScrollPanel
-local extPadding = Instance.new("UIPadding"); extPadding.PaddingTop = UDim.new(0, 8); extPadding.PaddingBottom = UDim.new(0, 15); extPadding.Parent = extrasScrollPanel
--- Main Panel Controls Setup
-local lockWrap, lockBtn, lockEmu = shared.createTacticalButton("LockToggle", "CORE LOCK: OFF", UDim2.new(0.92, 0, 0, 42), true, hudBackground)
-lockBtn.TextColor3 = Color3.fromRGB(255, 60, 60); shared.textButton = lockBtn
-local switchWrap, switchBtn, switchEmu = shared.createTacticalButton("PartSwitch", "AIM MOD: HEAD", UDim2.new(0.92, 0, 0, 32), true, hudBackground)
-shared.switchButton = switchBtn
-local extendWrap, extendBtn = shared.createTacticalButton("ExtendToggle", "[ + ]", UDim2.new(0, 32, 0, 32), false, mainFrame)
-extendBtn.Position = UDim2.new(0, -38, 0.5, -16); shared.extendButton = extendBtn
--- Submenu Extension Toggles Setup
-local function buildSubmenuToggle(name, text)
-local container, button, emu = shared.createTacticalButton(name, text, UDim2.new(0.92, 0, 0, 22), true, extrasScrollPanel)
-return button, emu
-end
--- FIXED ORDER MATRIX: Grouped buttons at the top of the canvas layout cleanly
-local modeBtn, modeEmu = buildSubmenuToggle("ModeToggle", "MODE: PLAYERS"); shared.modeButton = modeBtn
-local crosshairBtn, crosshairEmu = buildSubmenuToggle("CrosshairToggle", "CROSSHAIR: ENGAGED"); crosshairBtn.TextColor3 = Color3.fromRGB(0, 255, 255); shared.crosshairToggleButton = crosshairBtn
-local fovBtn, fovEmu = buildSubmenuToggle("FovToggle", "FOV: ENGAGED"); fovBtn.TextColor3 = Color3.fromRGB(0, 255, 255); shared.fovToggleButton = fovBtn
-local autoLockBtn, autoLockEmu = buildSubmenuToggle("AutoLockToggle", "AUTOLOCK: OFF"); shared.autoLockButton = autoLockBtn
-local espMasterBtn, espMasterEmu = buildSubmenuToggle("EspMasterToggle", "TACTICAL ESP: ON"); espMasterBtn.TextColor3 = Color3.fromRGB(0, 255, 255); shared.espMasterButton = espMasterBtn
-local wallEspBtn, wallEspEmu = buildSubmenuToggle("WallEspToggle", "WALL ESP: OFF"); shared.wallEspButton = wallEspBtn
-local wallCheckBtn, wallCheckEmu = buildSubmenuToggle("WallCheckToggle", "WALL CHECK: OFF"); shared.wallCheckButton = wallCheckBtn
-local teamCheckBtn, teamCheckEmu = buildSubmenuToggle("TeamCheckToggle", "TEAM CHECK: OFF"); shared.teamCheckButton = teamCheckBtn
-local friendCheckBtn, friendCheckEmu = buildSubmenuToggle("FriendCheckToggle", "FRIEND CHECK: OFF"); shared.friendCheckButton = friendCheckBtn
-local hitboxToggleBtn, hitboxToggleEmu = buildSubmenuToggle("HitboxToggle", "EXPAND HITBOX: OFF"); shared.hitboxToggleButton = hitboxToggleBtn
-local modifierBtn, modifierEmu = buildSubmenuToggle("ModifierToggle", "STAT CHANGER: OFF"); modifierBtn.TextColor3 = Color3.fromRGB(255, 100, 100); shared.modifierButton = modifierBtn
-local modalityBtn, modalityEmu = buildSubmenuToggle("ModalityToggle", "SNAP DIR: BOTH ACTIVE"); shared.modalityButton = modalityBtn
-local function buildSliderFramework(name, text, min, max, current)
-local container = Instance.new("Frame"); container.Name = name; container.Size = UDim2.new(0.92, 0, 0, 32); container.BackgroundColor3 = Color3.fromRGB(12, 12, 20); container.BackgroundTransparency = 0.15; container.ZIndex = 1; container.Parent = extrasScrollPanel
+-- Core Dashboard Assignments scaled proportionally to match the new 290px width profile
+local _, lockBtn, lockEmu = shared.createAbsolutePositionedButton("LockToggle", "CORE LOCK: OFF", 10, true, hudBackground, "locked")
+lockBtn.Size = UDim2.new(0.78, 0, 0, 42)
+local keyBox = lockBtn.Parent:FindFirstChild("KeybindBox") if keyBox then keyBox.Size = UDim2.new(0.18, 0, 0, 42) end
+local _, switchBtn, switchEmu = shared.createAbsolutePositionedButton("PartSwitch", "AIM MOD: HEAD", 58, true, hudBackground, nil)
+switchBtn.Size = UDim2.new(0.78, 0, 0, 32); shared.switchButton = switchBtn
+local keyBox2 = switchBtn.Parent:FindFirstChild("KeybindBox") if keyBox2 then keyBox2.Size = UDim2.new(0.18, 0, 0, 32) end
+local _, extendBtn = shared.createAbsolutePositionedButton("ExtendToggle", "[ + ]", 6, false, mainFrame, nil)
+extendBtn.Parent.Position = UDim2.new(0, -38, 0, 6); extendBtn.Size = UDim2.new(0, 32, 0, 32); shared.extendButton = extendBtn
+-- EXTRAS PANEL ACTION TOGGLES: Fixed Rows (10px to 296px)
+local _, modeBtn, modeEmu = shared.createAbsolutePositionedButton("ModeToggle", "MODE: PLAYERS", 10, true, extrasScrollPanel, nil)
+local _, crosshairBtn, crosshairEmu = shared.createAbsolutePositionedButton("CrosshairToggle", "CROSSHAIR: ENGAGED", 36, true, extrasScrollPanel, "crosshairEnabled")
+local _, fovBtn, fovEmu = shared.createAbsolutePositionedButton("FovToggle", "FOV: ENGAGED", 62, true, extrasScrollPanel, "fovEnabled")
+local _, autoLockBtn, autoLockEmu = shared.createAbsolutePositionedButton("AutoLockToggle", "AUTOLOCK: OFF", 88, true, extrasScrollPanel, "autolockEnabled")
+local _, espMasterBtn, espMasterEmu = shared.createAbsolutePositionedButton("EspMasterToggle", "TACTICAL ESP: ON", 114, true, extrasScrollPanel, "espMasterEnabled")
+local _, wallEspBtn, wallEspEmu = shared.createAbsolutePositionedButton("WallEspToggle", "WALL ESP: OFF", 140, true, extrasScrollPanel, "wallEspEnabled")
+local _, wallCheckBtn, wallCheckEmu = shared.createAbsolutePositionedButton("WallCheckToggle", "WALL CHECK: OFF", 166, true, extrasScrollPanel, "wallCheckEnabled")
+local _, teamCheckBtn, teamCheckEmu = shared.createAbsolutePositionedButton("TeamCheckToggle", "TEAM CHECK: OFF", 192, true, extrasScrollPanel, "teamCheckEnabled")
+local _, friendCheckBtn, friendCheckEmu = shared.createAbsolutePositionedButton("FriendCheckToggle", "FRIEND CHECK: OFF", 218, true, extrasScrollPanel, "friendCheckEnabled")
+local _, hitboxToggleBtn, hitboxToggleEmu = shared.createAbsolutePositionedButton("HitboxToggle", "EXPAND HITBOX: OFF", 244, true, extrasScrollPanel, "hitboxExpanded")
+local _, modifierBtn, modifierEmu = shared.createAbsolutePositionedButton("ModifierToggle", "STAT CHANGER: OFF", 270, true, extrasScrollPanel, "modifiersActive")
+local _, modalityBtn, modalityEmu = shared.createAbsolutePositionedButton("ModalityToggle", "SNAP DIR: BOTH ACTIVE", 296, true, extrasScrollPanel, nil)
+-- EXTRAS PANEL SLIDER SEGMENT: Positioned at the bottom of the drawer canvas (328px to 488px)
+local function buildSliderAbsoluteFramework(name, text, min, max, current, yOffset)
+local container = Instance.new("Frame"); container.Name = name; container.Size = UDim2.new(0.92, 0, 0, 28); container.Position = UDim2.new(0.04, 0, 0, yOffset); container.BackgroundColor3 = Color3.fromRGB(12, 12, 20); container.BackgroundTransparency = 0.15; container.ZIndex = 1; container.Parent = extrasScrollPanel
 local sCorner = Instance.new("UICorner"); sCorner.CornerRadius = UDim.new(0, 4); sCorner.Parent = container
 local stroke = Instance.new("UIStroke"); stroke.Thickness = 1.2; stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; stroke.ZIndex = 1; stroke.Parent = container; table.insert(shared.allStrokes, stroke)
-local label = Instance.new("TextLabel"); label.Size = UDim2.new(1, 0, 0.45, 0); label.Position = UDim2.new(0, 0, 0, 2); label.BackgroundTransparency = 1; label.TextColor3 = Color3.fromRGB(240, 240, 255); label.TextSize = 9; label.Font = Enum.Font.GothamBold; label.Text = text .. ": " .. tostring(current); label.ZIndex = 1; label.Parent = container
+local label = Instance.new("TextLabel"); label.Size = UDim2.new(1, 0, 0.45, 0); label.Position = UDim2.new(0, 0, 0, 1); label.BackgroundTransparency = 1; label.TextColor3 = Color3.fromRGB(240, 240, 255); label.TextSize = 8.5; label.Font = Enum.Font.GothamBold; label.Text = text .. ": " .. tostring(current); label.ZIndex = 1; label.Parent = container
 table.insert(textSyncList, label)
-local track = Instance.new("Frame"); track.Size = UDim2.new(0.85, 0, 0, 3); track.Position = UDim2.new(0.075, 0, 0.75, -2); track.BackgroundColor3 = Color3.fromRGB(24, 24, 36); track.ZIndex = 1; track.Parent = container
+local track = Instance.new("Frame"); track.Size = UDim2.new(0.85, 0, 0, 2); track.Position = UDim2.new(0.075, 0, 0.75, -1); track.BackgroundColor3 = Color3.fromRGB(24, 24, 36); track.ZIndex = 1; track.Parent = container
 local fill = Instance.new("Frame"); fill.Size = UDim2.new((current - min) / (max - min), 0, 1, 0); fill.ZIndex = 1; fill.Parent = track; table.insert(shared.themeBackgrounds, fill)
 local active = false
 local function update(pos)
-local pct = math.clamp((pos.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
-local val = min + (pct * (max - min))
+local pct = math.clamp((pos.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1); local val = min + (pct * (max - min))
 fill.Size = UDim2.new(pct, 0, 1, 0)
 if name == "PredSlider" then shared.PREDICTION_VALUE = val label.Text = "PREDICTION: " .. string.format("%.2f", val)
 elseif name == "SmoothSlider" then shared.SMOOTHNESS_VALUE = val label.Text = "SMOOTHNESS: " .. string.format("%.2f", val)
@@ -589,39 +470,48 @@ container.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputTyp
 UserInputService.InputChanged:Connect(function(i) if active and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then update(i.Position) end end)
 UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then active = false end end)
 end
--- FIXED SLIDER POSITION MATRIX: Placed cleanly at the bottom of the drawer canvas
-buildSliderFramework("PredSlider", "PREDICTION", 0, 10, shared.PREDICTION_VALUE)
-buildSliderFramework("SmoothSlider", "SMOOTHNESS", 0, 1, shared.SMOOTHNESS_VALUE)
-buildSliderFramework("FovSlider", "FOV RADIUS", shared.MIN_FOV_LIMIT, shared.MAX_FOV_LIMIT, shared.FOV_RADIUS)
-buildSliderFramework("HitboxSlider", "HITBOX SCALE", shared.MIN_HITBOX_LIMIT, shared.MAX_HITBOX_LIMIT, shared.hitboxSizeValue)
-buildSliderFramework("SpeedSlider", "WALK SPEED", 16, shared.MAX_WALKSPEED_LIMIT, shared.walkSpeedValue)
-buildSliderFramework("JumpSlider", "JUMP POWER", 50, shared.MAX_JUMPPOWER_LIMIT, shared.jumpPowerValue)
--- Crosshair Reticle Creation
+buildSliderAbsoluteFramework("PredSlider", "PREDICTION", 0, 10, shared.PREDICTION_VALUE, 328)
+buildSliderAbsoluteFramework("SmoothSlider", "SMOOTHNESS", 0, 1, shared.SMOOTHNESS_VALUE, 360)
+buildSliderAbsoluteFramework("FovSlider", "FOV RADIUS", shared.MIN_FOV_LIMIT, shared.MAX_FOV_LIMIT, shared.FOV_RADIUS, 392)
+buildSliderAbsoluteFramework("HitboxSlider", "HITBOX SCALE", shared.MIN_HITBOX_LIMIT, shared.MAX_HITBOX_LIMIT, shared.hitboxSizeValue, 424)
+buildSliderAbsoluteFramework("SpeedSlider", "WALK SPEED", 16, shared.MAX_WALKSPEED_LIMIT, shared.walkSpeedValue, 456)
+buildSliderAbsoluteFramework("JumpSlider", "JUMP POWER", 50, shared.MAX_JUMPPOWER_LIMIT, shared.jumpPowerValue, 488)
+-- Reticle HUD Assembly
 local centerCrosshairContainer = Instance.new("Frame"); centerCrosshairContainer.Name = "CenterCrosshairContainer"; centerCrosshairContainer.Size = UDim2.new(0, 60, 0, 60); centerCrosshairContainer.AnchorPoint = Vector2.new(0.5, 0.5); centerCrosshairContainer.BackgroundTransparency = 1; centerCrosshairContainer.Visible = shared.crosshairEnabled; centerCrosshairContainer.Parent = screenGui
 local crosshairCircle = Instance.new("Frame"); crosshairCircle.Size = UDim2.new(0, 10, 0, 10); crosshairCircle.Position = UDim2.new(0.5, 0, 0.5, 0); crosshairCircle.AnchorPoint = Vector2.new(0.5, 0.5); crosshairCircle.BackgroundTransparency = 1; crosshairCircle.Parent = centerCrosshairContainer
-Instance.new("UICorner", crosshairCircle).CornerRadius = UDim.new(1, 0)
+Instance.new("UICorner", crosshairCircle)
 local circleStroke = Instance.new("UIStroke"); circleStroke.Thickness = 2; circleStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; circleStroke.Parent = crosshairCircle; table.insert(shared.allStrokes, circleStroke)
 local centralReticleDot = Instance.new("Frame"); centralReticleDot.Size = UDim2.new(0, 2, 0, 2); centralReticleDot.Position = UDim2.new(0.5, 0, 0.5, 0); centralReticleDot.AnchorPoint = Vector2.new(0.5, 0.5); table.insert(shared.crosshairLines, centralReticleDot); centralReticleDot.Parent = centerCrosshairContainer
-local function createSegment(name, size, pos)
-local line = Instance.new("Frame"); line.Size = size; line.Position = pos; line.AnchorPoint = Vector2.new(0.5, 0.5); line.BorderSizePixel = 0; line.Parent = centerCrosshairContainer; table.insert(shared.crosshairLines, line)
-end
+local function createSegment(name, size, pos) local line = Instance.new("Frame"); line.Size = size; line.Position = pos; line.AnchorPoint = Vector2.new(0.5, 0.5); line.BorderSizePixel = 0; line.Parent = centerCrosshairContainer; table.insert(shared.crosshairLines, line) end
 createSegment("L", UDim2.new(0, 10, 0, 2), UDim2.new(0.5, -13, 0.5, 0))
 createSegment("R", UDim2.new(0, 10, 0, 2), UDim2.new(0.5, 13, 0.5, 0))
 createSegment("T", UDim2.new(0, 2, 0, 10), UDim2.new(0.5, 0, 0.5, -13))
 createSegment("B", UDim2.new(0, 2, 0, 10), UDim2.new(0.5, 0, 0.5, 13))
 shared.CROSSHAIR_SPIN_SPEED = 90.00
-shared.dragHandleButton = Instance.new("TextButton"); shared.dragHandleButton.Size = UDim2.new(0.92, 0, 0, 28); shared.dragHandleButton.BackgroundColor3 = Color3.fromRGB(20, 20, 32); shared.dragHandleButton.Text = ":: HOLD TO DRAG HUD ::"; shared.dragHandleButton.TextColor3 = Color3.fromRGB(150, 150, 170); shared.dragHandleButton.TextSize = 9.5; shared.dragHandleButton.Font = Enum.Font.GothamBold; shared.dragHandleButton.ZIndex = 5; shared.dragHandleButton.Parent = hudBackground
+shared.dragHandleButton = Instance.new("TextButton"); shared.dragHandleButton.Size = UDim2.new(0.92, 0, 0, 24); shared.dragHandleButton.Position = UDim2.new(0.04, 0, 0, 134); shared.dragHandleButton.BackgroundColor3 = Color3.fromRGB(20, 20, 32); shared.dragHandleButton.Text = ":: HOLD TO DRAG HUD ::"; shared.dragHandleButton.TextColor3 = Color3.fromRGB(150, 150, 170); shared.dragHandleButton.TextSize = 9; shared.dragHandleButton.Font = Enum.Font.GothamBold; shared.dragHandleButton.ZIndex = 5; shared.dragHandleButton.Parent = hudBackground
 Instance.new("UICorner", shared.dragHandleButton).CornerRadius = UDim.new(0, 4)
 local stroke8 = Instance.new("UIStroke"); stroke8.Thickness = 1.5; stroke8.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; stroke8.ZIndex = 5; stroke8.Parent = shared.dragHandleButton; table.insert(shared.allStrokes, stroke8)
--- Fixed Perfect Circle FOV Overlay Vector Ring
-shared.fovCircle = Instance.new("Frame"); shared.fovCircle.Size = UDim2.new(0, shared.FOV_RADIUS * 2, 0, shared.FOV_RADIUS * 2); shared.fovCircle.AnchorPoint = Vector2.new(0.5, 0.5); shared.fovCircle.BackgroundTransparency = 1; shared.fovCircle.Visible = shared.fovEnabled; shared.fovCircle.Parent = screenGui
-local cCorner = Instance.new("UICorner"); cCorner.CornerRadius = UDim.new(1, 0); cCorner.Parent = shared.fovCircle
-shared.circleStroke = Instance.new("UIStroke"); shared.circleStroke.Thickness = 1.5; shared.circleStroke.Transparency = 0.4; shared.circleStroke.Parent = shared.fovCircle
+-- True Circular Vector FOV Overlay Shape
+shared.fovCircle = Instance.new("Frame")
+shared.fovCircle.Size = UDim2.new(0, shared.FOV_RADIUS * 2, 0, shared.FOV_RADIUS * 2)
+shared.fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+shared.fovCircle.BackgroundTransparency = 1
+shared.fovCircle.Visible = shared.fovEnabled
+shared.fovCircle.Parent = screenGui
+local circularCornerConstraint = Instance.new("UICorner")
+circularCornerConstraint.CornerRadius = UDim.new(1, 0)
+circularCornerConstraint.Parent = shared.fovCircle
+shared.circleStroke = Instance.new("UIStroke")
+shared.circleStroke.Thickness = 1.5
+shared.circleStroke.Transparency = 0.4
+shared.circleStroke.Parent = shared.fovCircle
 local dragging, dragInput, dragStart, sPos
 shared.dragHandleButton.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then dragging = true; dragStart = i.Position; sPos = mainFrame.Position; i.Changed:Connect(function() if i.UserInputState == Enum.UserInputState.End then dragging = false end end) end end)
 UserInputService.InputChanged:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then dragInput = i end end)
 RunService.RenderStepped:Connect(function() if dragging and dragInput then local d = dragInput.Position - dragStart; mainFrame.Position = UDim2.new(sPos.X.Scale, sPos.X.Offset + d.X, sPos.Y.Scale, sPos.Y.Offset + d.Y) end end)
--- Physics Sub-Simulation Layer (Forced Hitbox Matrix Sync & Stat Overrides)
+-- ============================================================================
+-- PART 7: RUNTIME SIMULATION LOOPS & BORDER SPECTRAL CHROMA SYNCHRONIZERS
+-- ============================================================================
 RunService.PreSimulation:Connect(function()
 local character = localPlayer.Character
 local humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -629,131 +519,110 @@ if humanoid and shared.modifiersActive then
 humanoid.WalkSpeed = shared.walkSpeedValue
 humanoid.UseJumpPower = true
 humanoid.JumpPower = shared.jumpPowerValue
-pcall(function()
-humanoid.JumpHeight = (shared.jumpPowerValue * shared.jumpPowerValue) / (2 * workspace.Gravity)
-end)
+pcall(function() humanoid.JumpHeight = (shared.jumpPowerValue * shared.jumpPowerValue) / (2 * workspace.Gravity) end)
 end
--- FIXED ACTION STEP: Forced continuous sweep verifying team boundaries
 if shared.hitboxExpanded then
 shared.refreshHitboxState()
 end
 end)
--- Main Context Rendering Tick Loop
 RunService.RenderStepped:Connect(function()
 local absoluteCenter = UDim2.new(0, camera.ViewportSize.X / 2, 0, camera.ViewportSize.Y / 2)
 shared.fovCircle.Size = UDim2.new(0, shared.FOV_RADIUS * 2, 0, shared.FOV_RADIUS * 2); shared.fovCircle.Position = absoluteCenter
 centerCrosshairContainer.Position = absoluteCenter; centerCrosshairContainer.Rotation = (tick() * shared.CROSSHAIR_SPIN_SPEED) % 360
 local dynamicColor = Color3.fromHSV((tick() * shared.RAINBOW_SPEED) % 1, 0.95, 1)
 shared.hudStroke.Color = dynamicColor; shared.subStroke.Color = dynamicColor; shared.circleStroke.Color = dynamicColor
--- Safe Validation: Skips color injection safely if label targets go out of bounds
+-- TEXT FEEDBACK ROUTING ENGINE: Font text locks exclusively to state matrices (Green/Red)
+for _, data in ipairs(colorManagedButtons) do
+pcall(function()
+local isActiveState = shared[data.targetStateString]
+data.buttonObject.TextColor3 = isActiveState and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(255, 60, 60)
+end)
+end
+-- BORDER OVERLAY SPECTRUM PIPELINE: Outlines continuously loop rainbow independent of text
+for _, outlineStroke in ipairs(shared.allStrokes) do
+pcall(function()
+outlineStroke.Color = dynamicColor
+end)
+end
+-- Non-managed text parameters (Sliders) stay safely synchronized
 for _, textObj in ipairs(textSyncList) do
 pcall(function()
-if textObj and textObj.Parent and textObj.TextColor3 ~= Color3.fromRGB(255, 60, 60) and textObj.TextColor3 ~= Color3.fromRGB(255, 120, 120) then
+if textObj and textObj.Parent then
 textObj.TextColor3 = dynamicColor
 end
 end)
 end
 shared.updateEspSectors()
-for _, stroke in ipairs(shared.allStrokes) do pcall(function() stroke.Color = dynamicColor end) end
 for _, segment in ipairs(shared.crosshairLines) do pcall(function() segment.BackgroundColor3 = dynamicColor end) end
 end)
 RunService.Stepped:Connect(function()
 if shared.hitboxExpanded then
 for part, _ in pairs(shared.originalHitboxData) do
-if part and part.Parent and part.Parent:FindFirstChildOfClass("Humanoid") and part.Parent:FindFirstChildOfClass("Humanoid").Health > 0 then
-part.CanCollide = false
-end
+if part and part.Parent and part.Parent:FindFirstChildOfClass("Humanoid") and part.Parent:FindFirstChildOfClass("Humanoid").Health > 0 then part.CanCollide = false end
 end
 end
 end)
 shared.lockConnection = RunService.RenderStepped:Connect(function()
-local char = shared.target and shared.target.Parent
-local isAlive = char and char:FindFirstChildOfClass("Humanoid") and char:FindFirstChildOfClass("Humanoid").Health > 0
+local char = shared.target and shared.target.Parent; local isAlive = char and char:FindFirstChildOfClass("Humanoid") and char:FindFirstChildOfClass("Humanoid").Health > 0
 if shared.locked and isAlive and not (shared.wallCheckEnabled and shared.isWallBetween(shared.target)) and not isTeammate(char) then
 local pos = shared.target.Position
-if shared.PREDICTION_VALUE > 0.01 and char:FindFirstChild("HumanoidRootPart") then
-pos = pos + (char.HumanoidRootPart.Velocity * ( (camera.CFrame.Position - pos).Magnitude / 1000 ) * shared.PREDICTION_VALUE)
-end
+if shared.PREDICTION_VALUE > 0.01 and char:FindFirstChild("HumanoidRootPart") then pos = pos + (char.HumanoidRootPart.Velocity * ( (camera.CFrame.Position - pos).Magnitude / 1000 ) * shared.PREDICTION_VALUE) end
 local targetCFrame = CFrame.new(camera.CFrame.Position, pos); local localChar = localPlayer.Character
-if shared.lockModalityMode == "CAMERA ONLY" or shared.lockModalityMode == "BOTH ACTIVE" then
-camera.CFrame = shared.SMOOTHNESS_VALUE <= 0.01 and targetCFrame or camera.CFrame:Lerp(targetCFrame, math.clamp(1 - (shared.SMOOTHNESS_VALUE * 0.92), 0.01, 1))
-end
-if (shared.lockModalityMode == "BODY ONLY" or shared.lockModalityMode == "BOTH ACTIVE") and localChar and localChar.PrimaryPart then
-localChar:SetPrimaryPartCFrame(CFrame.new(localChar.PrimaryPart.Position, Vector3.new(pos.X, localChar.PrimaryPart.Position.Y, pos.Z)))
-end
+if shared.lockModalityMode == "CAMERA ONLY" or shared.lockModalityMode == "BOTH ACTIVE" then camera.CFrame = shared.SMOOTHNESS_VALUE <= 0.01 and targetCFrame or camera.CFrame:Lerp(targetCFrame, math.clamp(1 - (shared.SMOOTHNESS_VALUE * 0.92), 0.01, 1)) end
+if (shared.lockModalityMode == "BODY ONLY" or shared.lockModalityMode == "BOTH ACTIVE") and localChar and localChar.PrimaryPart then localChar:SetPrimaryPartCFrame(CFrame.new(localChar.PrimaryPart.Position, Vector3.new(pos.X, localChar.PrimaryPart.Position.Y, pos.Z))) end
 else
-if shared.locked then shared.locked = false; shared.target = nil; shared.textButton.Text = "CORE LOCK: OFF"; shared.textButton.TextColor3 = Color3.fromRGB(255, 60, 60); shared.clearTargetEsp() end
+if shared.locked then shared.locked = false; shared.target = nil; shared.clearTargetEsp() end
 if shared.autolockEnabled and not shared.autolockCooldownActive then
-local t = shared.getClosestTarget()
-if t then shared.target = t; shared.locked = true; shared.textButton.Text = "CORE LOCK: ACTIVE"; shared.textButton.TextColor3 = Color3.fromRGB(0, 255, 150) end
+local t = shared.getClosestTarget(); if t then shared.target = t; shared.locked = true end
 end
 end
 end)
--- LAYERED EXTENSION MANAGEMENT TWEEN PIPELINE
+-- PANEL TOGGLE TRANSITION MATRICES
 local tweenInfo = TweenInfo.new(0.40, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out)
-linkInputTouch(shared.extendButton, function()
-shared.menuExpanded = true
-extendBtn.Visible = false
-extrasScrollPanel.Visible = true
-local openTween = TweenService:Create(extrasScrollPanel, tweenInfo, {Position = UDim2.new(0, -235, 0, 0)})
-openTween:Play()
-openTween.Completed:Connect(function()
-if shared.menuExpanded then
-closeExtrasWrap.Visible = true
+local function coreLockToggleMacro()
+if shared.locked then shared.locked = false; shared.target = nil; shared.autolockCooldownActive = true; task.delay(shared.COOLDOWN_DURATION, function() shared.autolockCooldownActive = false end)
+else local acq = shared.getClosestTarget(); if acq then shared.target = acq; shared.locked = true end end
 end
-end)
-end)
-linkInputTouch(closeExtrasBtn, function()
-shared.menuExpanded = false
-closeExtrasWrap.Visible = false
-local closeTween = TweenService:Create(extrasScrollPanel, tweenInfo, {Position = UDim2.new(0, 0, 0, 0)})
-closeTween:Play()
-closeTween.Completed:Connect(function()
-if not shared.menuExpanded then
-extrasScrollPanel.Visible = false
-extendBtn.Visible = true
-end
-end)
-end)
-local function toggleLockMacro()
-if shared.locked then shared.locked = false; shared.target = nil; shared.textButton.Text = "CORE LOCK: OFF"; shared.textButton.TextColor3 = Color3.fromRGB(255, 60, 60); shared.autolockCooldownActive = true; task.delay(shared.COOLDOWN_DURATION, function() shared.autolockCooldownActive = false end)
-else local acq = shared.getClosestTarget(); if acq then shared.target = acq; shared.locked = true; shared.textButton.Text = "CORE LOCK: ACTIVE"; shared.textButton.TextColor3 = Color3.fromRGB(0, 255, 150) end end
-end
-linkInputTouch(shared.textButton, toggleLockMacro); lockEmu.Event:Connect(toggleLockMacro)
-local function cycleAimBoneMacro()
-shared.targetPartIndex = (shared.targetPartIndex % #shared.targetPartList) + 1; shared.targetPartName = shared.targetPartList[shared.targetPartIndex]; shared.switchButton.Text = "AIM MOD: " .. shared.targetPartName:upper()
+linkInputTouch(lockBtn, coreLockToggleMacro); lockEmu.Event:Connect(coreLockToggleMacro)
+local function coreLimbCycleMacro()
+shared.targetPartIndex = (shared.targetPartIndex % #shared.targetPartList) + 1; shared.targetPartName = shared.targetPartList[shared.targetPartIndex]; switchBtn.Text = "AIM MOD: " .. shared.targetPartName:upper()
 if shared.hitboxExpanded then shared.refreshHitboxState() end
 end
-linkInputTouch(shared.switchButton, cycleAimBoneMacro); switchEmu.Event:Connect(cycleAimBoneMacro)
-local function executeModeToggle() shared.targetMode = (shared.targetMode == "Players" and "NPCs") or (shared.targetMode == "NPCs" and "All") or "Players"; shared.modeButton.Text = "MODE: " .. shared.targetMode:upper(); shared.clearTargetEsp() if shared.hitboxExpanded then shared.refreshHitboxState() end end
-linkInputTouch(shared.modeButton, executeModeToggle); modeEmu.Event:Connect(executeModeToggle)
-local function executeCrosshairToggle() shared.crosshairEnabled = not shared.crosshairEnabled; centerCrosshairContainer.Visible = shared.crosshairEnabled; shared.crosshairToggleButton.Text = shared.crosshairEnabled and "CROSSHAIR: ENGAGED" or "CROSSHAIR: OFF" end
-linkInputTouch(shared.crosshairToggleButton, executeCrosshairToggle); crosshairEmu.Event:Connect(executeCrosshairToggle)
-local function executeFovToggle() shared.fovEnabled = not shared.fovEnabled; shared.fovCircle.Visible = shared.fovEnabled; shared.fovToggleButton.Text = shared.fovEnabled and "FOV: ENGAGED" or "FOV: DISABLED" end
-linkInputTouch(shared.fovToggleButton, executeFovToggle); fovEmu.Event:Connect(executeFovToggle)
-local function executeAutolockToggle() shared.autolockEnabled = not shared.autolockEnabled; shared.autoLockButton.Text = shared.autolockEnabled and "AUTOLOCK: ON" or "AUTOLOCK: OFF" end
-linkInputTouch(shared.autoLockButton, executeAutolockToggle); autoLockEmu.Event:Connect(executeAutolockToggle)
-local function executeEspMasterToggle() shared.espMasterEnabled = not shared.espMasterEnabled; shared.espMasterButton.Text = shared.espMasterEnabled and "TACTICAL ESP: ON" or "TACTICAL ESP: OFF" end
-linkInputTouch(shared.espMasterButton, executeEspMasterToggle); espMasterEmu.Event:Connect(executeEspMasterToggle)
-local function executeWallEspToggle() shared.wallEspEnabled = not shared.wallEspEnabled; shared.wallEspButton.Text = shared.wallEspEnabled and "WALL ESP: ON" or "WALL ESP: OFF" end
-linkInputTouch(shared.wallEspButton, executeWallEspToggle); wallEspEmu.Event:Connect(executeWallEspToggle)
-local function executeWallCheckToggle() shared.wallCheckEnabled = not shared.wallCheckEnabled; shared.wallCheckButton.Text = shared.wallCheckEnabled and "WALL CHECK: ON" or "WALL CHECK: OFF" end
-linkInputTouch(shared.wallCheckButton, executeWallCheckToggle); wallCheckEmu.Event:Connect(executeWallCheckToggle)
-local function executeTeamCheckToggle() shared.teamCheckEnabled = not shared.teamCheckEnabled; shared.teamCheckButton.Text = shared.teamCheckEnabled and "TEAM CHECK: ON" or "TEAM CHECK: OFF" if shared.hitboxExpanded then shared.refreshHitboxState() end end
-linkInputTouch(shared.teamCheckButton, executeTeamCheckToggle); teamCheckEmu.Event:Connect(executeTeamCheckToggle)
-local function executeFriendCheckToggle() shared.friendCheckEnabled = not shared.friendCheckEnabled; shared.friendCheckButton.Text = shared.friendCheckEnabled and "FRIEND CHECK: ON" or "FRIEND CHECK: OFF" if shared.hitboxExpanded then shared.refreshHitboxState() end end
-linkInputTouch(shared.friendCheckButton, executeFriendCheckToggle); friendCheckEmu.Event:Connect(executeFriendCheckToggle)
-local function executeHitboxToggle() shared.hitboxExpanded = not shared.hitboxExpanded; shared.hitboxToggleButton.Text = shared.hitboxExpanded and "EXPAND HITBOX: ON" or "EXPAND HITBOX: OFF"; shared.refreshHitboxState() end
-linkInputTouch(shared.hitboxToggleButton, executeHitboxToggle); hitboxToggleEmu.Event:Connect(executeHitboxToggle)
-local function executeModifierToggle()
-shared.modifiersActive = not shared.modifiersActive; shared.modifierButton.Text = shared.modifiersActive and "STAT CHANGER: ACTIVE" or "STAT CHANGER: OFF"; shared.modifierButton.TextColor3 = shared.modifiersActive and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(255, 100, 100)
-if not shared.modifiersActive then
-local hum = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid")
-if hum then hum.WalkSpeed = 16; hum.JumpPower = 50; pcall(function() hum.JumpHeight = 7.2 end) end
-end
-end
-linkInputTouch(shared.modifierButton, executeModifierToggle); modifierEmu.Event:Connect(executeModifierToggle)
-local function executeModalityToggle() shared.lockModalityIndex = (shared.lockModalityIndex % #shared.lockModalityList) + 1; shared.lockModalityMode = shared.lockModalityList[shared.lockModalityIndex]; shared.modalityButton.Text = "SNAP DIR: " .. shared.lockModalityMode end
-linkInputTouch(shared.modalityButton, executeModalityToggle); modalityEmu.Event:Connect(executeModalityToggle)
+linkInputTouch(switchBtn, coreLimbCycleMacro); switchEmu.Event:Connect(coreLimbCycleMacro)
+linkInputTouch(shared.extendButton, function()
+shared.menuExpanded = true; extendBtn.Visible = false; extrasScrollPanel.Visible = true
+-- Slidout offset recalibrated to match expanded -295px width profile smoothly
+local openTween = TweenService:Create(extrasScrollPanel, tweenInfo, {Position = UDim2.new(0, -300, 0, 0)})
+openTween:Play(); openTween.Completed:Connect(function() if shared.menuExpanded then closeExtrasWrap.Visible = true end end)
+end)
+linkInputTouch(closeExtrasBtn, function()
+shared.menuExpanded = false; closeExtrasWrap.Visible = false
+local closeTween = TweenService:Create(extrasScrollPanel, tweenInfo, {Position = UDim2.new(0, 0, 0, 0)})
+closeTween:Play(); closeTween.Completed:Connect(function() if not shared.menuExpanded then extrasScrollPanel.Visible = false; extendBtn.Visible = true end end)
+end)
+linkInputTouch(modeBtn, function() shared.targetMode = (shared.targetMode == "Players" and "NPCs") or (shared.targetMode == "NPCs" and "All") or "Players"; modeBtn.Text = "MODE: " .. shared.targetMode:upper(); shared.clearTargetEsp() if shared.hitboxExpanded then shared.refreshHitboxState() end end)
+modeEmu.Event:Connect(function() shared.targetMode = (shared.targetMode == "Players" and "NPCs") or (shared.targetMode == "NPCs" and "All") or "Players"; modeBtn.Text = "MODE: " .. shared.targetMode:upper(); shared.clearTargetEsp() if shared.hitboxExpanded then shared.refreshHitboxState() end end)
+linkInputTouch(crosshairBtn, function() shared.crosshairEnabled = not shared.crosshairEnabled; centerCrosshairContainer.Visible = shared.crosshairEnabled end)
+crosshairEmu.Event:Connect(function() shared.crosshairEnabled = not shared.crosshairEnabled; centerCrosshairContainer.Visible = shared.crosshairEnabled end)
+linkInputTouch(fovBtn, function() shared.fovEnabled = not shared.fovEnabled; shared.fovCircle.Visible = shared.fovEnabled end)
+fovEmu.Event:Connect(function() shared.fovEnabled = not shared.fovEnabled; shared.fovCircle.Visible = shared.fovEnabled end)
+linkInputTouch(autoLockBtn, function() shared.autolockEnabled = not shared.autolockEnabled end)
+autoLockEmu.Event:Connect(function() shared.autolockEnabled = not shared.autolockEnabled end)
+linkInputTouch(espMasterBtn, function() shared.espMasterEnabled = not shared.espMasterEnabled end)
+espMasterEmu.Event:Connect(function() shared.espMasterEnabled = not shared.espMasterEnabled end)
+linkInputTouch(wallEspBtn, function() shared.wallEspEnabled = not shared.wallEspEnabled end)
+wallEspEmu.Event:Connect(function() shared.wallEspEnabled = not shared.wallEspEnabled end)
+linkInputTouch(wallCheckBtn, function() shared.wallCheckEnabled = not shared.wallCheckEnabled end)
+wallCheckEmu.Event:Connect(function() shared.wallCheckEnabled = not shared.wallCheckEnabled end)
+linkInputTouch(teamCheckBtn, function() shared.teamCheckEnabled = not shared.teamCheckEnabled if shared.hitboxExpanded then shared.refreshHitboxState() end end)
+teamCheckEmu.Event:Connect(function() shared.teamCheckEnabled = not shared.teamCheckEnabled if shared.hitboxExpanded then shared.refreshHitboxState() end end)
+linkInputTouch(friendCheckBtn, function() shared.friendCheckEnabled = not shared.friendCheckEnabled if shared.hitboxExpanded then shared.refreshHitboxState() end end)
+friendCheckEmu.Event:Connect(function() shared.friendCheckEnabled = not shared.friendCheckEnabled if shared.hitboxExpanded then shared.refreshHitboxState() end end)
+linkInputTouch(hitboxToggleBtn, function() shared.hitboxExpanded = not shared.hitboxExpanded; shared.refreshHitboxState() end)
+hitboxToggleEmu.Event:Connect(function() shared.hitboxExpanded = not shared.hitboxExpanded; shared.refreshHitboxState() end)
+linkInputTouch(modifierBtn, function() shared.modifiersActive = not shared.modifiersActive if not shared.modifiersActive then local hum = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid") if hum then hum.WalkSpeed = 16; hum.JumpPower = 50; pcall(function() hum.JumpHeight = 7.2 end) end end end)
+modifierEmu.Event:Connect(function() shared.modifiersActive = not shared.modifiersActive if not shared.modifiersActive then local hum = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid") if hum then hum.WalkSpeed = 16; hum.JumpPower = 50; pcall(function() hum.JumpHeight = 7.2 end) end end end)
+linkInputTouch(modalityBtn, function() shared.lockModalityIndex = (shared.lockModalityIndex % #shared.lockModalityList) + 1; shared.lockModalityMode = shared.lockModalityList[shared.lockModalityIndex]; modalityBtn.Text = "SNAP DIR: " .. shared.lockModalityMode end)
+modalityEmu.Event:Connect(function() shared.lockModalityIndex = (shared.lockModalityIndex % #shared.lockModalityList) + 1; shared.lockModalityMode = shared.lockModalityList[shared.lockModalityIndex]; modalityBtn.Text = "SNAP DIR: " .. shared.lockModalityMode end)
 task.spawn(function() while task.wait(0.5) do if localPlayer.Character then shared.wallCheckParams.FilterDescendantsInstances = {localPlayer.Character, camera} end end end)
-print("[Master Core] Layout Realignment Complete.")
+print("[Master Core] Wider Frame Layout with Bottom Canvas Buffers Operational.")
