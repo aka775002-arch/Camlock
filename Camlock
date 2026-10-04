@@ -1,5 +1,5 @@
 -- ============================================================================
--- PART 1: CORE SCREEN CONTAINER SYSTEM (BULLETPROOF INITIALIZATION)
+-- PART 1: CORE CONTAINER INITIALIZATION
 -- ============================================================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -10,14 +10,12 @@ local CoreGui = game:GetService("CoreGui")
 local localPlayer = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 
--- Wipe duplicate legacy runtime windows out of layout history
 for _, item in pairs(CoreGui:GetChildren()) do
 	if item.Name == "QuantumCamlockGui" or item.Name == "CenterCrosshairContainer" or string.sub(item.Name, -4) == "_ESP" then
 		item:Destroy()
 	end
 end
 
--- Absolute Top-Level Global GUI Instance
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "QuantumCamlockGui"
 screenGui.ResetOnSpawn = false
@@ -275,8 +273,18 @@ end
 -- PART 4: HORIZONTAL TELEMETRY ESP SECTOR DRAWING ENGINE
 -- ============================================================================
 function shared.clearTargetEsp()
-for _, c in pairs(CoreGui:GetChildren()) do if string.sub(c.Name, -4) == "_ESP" then c:Destroy() end end
-table.clear(shared.activeEspStorage)
+	for _, c in pairs(CoreGui:GetChildren()) do if string.sub(c.Name, -4) == "_ESP" then c:Destroy() end end
+	table.clear(shared.activeEspStorage)
+end
+
+local function getEquippedWeapon(char)
+	if char then
+local tool = char:FindFirstChildOfClass("Tool")
+if tool then
+return tostring(tool.Name):upper()
+end
+end
+return "UNARMED"
 end
 function shared.makeEsp(obj, isPlayer)
 if not obj or obj == localPlayer or obj == localPlayer.Character then return end
@@ -303,7 +311,7 @@ local BillboardGui = Instance.new("BillboardGui")
 local TextLabel = Instance.new("TextLabel")
 BillboardGui.Adornee = head; BillboardGui.Parent = ESPholder; BillboardGui.Size = UDim2.new(0, 150, 0, 150); BillboardGui.StudsOffset = Vector3.new(0, 1.5, 0); BillboardGui.AlwaysOnTop = true
 TextLabel.Parent = BillboardGui; TextLabel.BackgroundTransparency = 1; TextLabel.Position = UDim2.new(0, -25, 0, -50)
-TextLabel.Size = UDim2.new(0, 200, 0, 100); TextLabel.Font = Enum.Font.SourceSansSemibold; TextLabel.TextSize = 16; TextLabel.TextStrokeTransparency = 0; TextLabel.TextYAlignment = Enum.TextYAlignment.Bottom
+TextLabel.Size = UDim2.new(0, 200, 0, 100); TextLabel.Font = Enum.Font.SourceSansSemibold; TextLabel.TextSize = 14; TextLabel.TextStrokeTransparency = 0; TextLabel.TextYAlignment = Enum.TextYAlignment.Bottom
 shared.activeEspStorage[obj] = {folder = ESPholder, label = TextLabel, highlight = characterHighlight, boxes = adornments, characterLink = char, isPlayerType = isPlayer}
 end
 end
@@ -333,7 +341,8 @@ if not char.Parent or not folder.Parent or targetModeMismatch then if folder the
 local hum = char:FindFirstChildOfClass("Humanoid"); local root = char:FindFirstChild("HumanoidRootPart")
 if hum and root and localRoot and hum.Health > 0 then
 local distance = math.floor((localRoot.Position - root.Position).Magnitude)
-data.label.Text = string.format("[%s]\nName: %s | HP: %s | Studs: %d", getEquippedWeapon(char), data.isPlayerType and obj.Name or char.Name, string.format("%.1f", hum.Health), distance)
+local resolvedName = data.isPlayerType and tostring(obj.Name) or tostring(char.Name)
+data.label.Text = string.format("[%s]\nName: %s | HP: %s | Studs: %d", getEquippedWeapon(char), resolvedName, string.format("%.1f", hum.Health), distance)
 local assignedColor = Color3.fromRGB(255, 60, 60)
 if data.isPlayerType then
 if isTeammate(char) then assignedColor = currentRainbowColor elseif localPlayer:IsFriendsWith(obj.UserId) then assignedColor = Color3.fromRGB(60, 255, 60) elseif shared.wallEspEnabled and shared.isWallBetween(root) then assignedColor = Color3.fromRGB(0, 120, 255) end
@@ -345,13 +354,12 @@ else if folder then folder:Destroy() end; shared.activeEspStorage[obj] = nil end
 end
 end
 -- ============================================================================
--- PART 5: EXPANDED WIDER DUAL-PANEL FRAMES (WIDTH ACCELERATED TO 290PX)
+-- PART 5: MASTERS FRAME ARRAYS (SHORTENED MAIN HUD / PERSISTENT EXTRAS)
 -- ============================================================================
--- Main Anchor expanded to width = 290
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainAnchor"
-mainFrame.Size = UDim2.new(0, 290, 0, 165)
-mainFrame.Position = UDim2.new(0.85, -145, 0.45, -82)
+mainFrame.Size = UDim2.new(0, 225, 0, 110) -- Shortened to match original layout size constraints
+mainFrame.Position = UDim2.new(0.85, -112, 0.45, -55)
 mainFrame.BackgroundTransparency = 1
 mainFrame.ZIndex = 5
 mainFrame.Parent = screenGui
@@ -360,7 +368,7 @@ hudBackground.Name = "HUDBackdrop"; hudBackground.Size = UDim2.new(1, 0, 1, 0); 
 table.insert(shared.themeBackgrounds, hudBackground)
 local frameCorner = Instance.new("UICorner"); frameCorner.CornerRadius = UDim.new(0, 8); frameCorner.Parent = hudBackground
 shared.hudStroke = Instance.new("UIStroke"); shared.hudStroke.Thickness = 2.0; shared.hudStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; shared.hudStroke.ZIndex = 5; shared.hudStroke.Parent = hudBackground
--- EXTRAS PANEL: Width expanded to 290, CanvasSize increased to 580 to add bottom scroll padding
+-- EXTRAS PANEL CONTAINER (Persistent 290px wide canvas framework)
 local extrasScrollPanel = Instance.new("ScrollingFrame")
 extrasScrollPanel.Name = "ExtrasPanel"
 extrasScrollPanel.Size = UDim2.new(0, 290, 0, 340)
@@ -370,12 +378,11 @@ extrasScrollPanel.BackgroundTransparency = 0.25
 extrasScrollPanel.ZIndex = 1
 extrasScrollPanel.Visible = false
 extrasScrollPanel.ScrollBarThickness = 3
-extrasScrollPanel.CanvasSize = UDim2.new(0, 0, 0, 580) -- Safely extends maximum bottom workspace boundary
+extrasScrollPanel.CanvasSize = UDim2.new(0, 0, 0, 500)
 extrasScrollPanel.Parent = mainFrame
 table.insert(shared.themeBackgrounds, extrasScrollPanel)
 local extrasCorner = Instance.new("UICorner"); extrasCorner.CornerRadius = UDim.new(0, 8); extrasCorner.Parent = extrasScrollPanel
 shared.subStroke = Instance.new("UIStroke"); shared.subStroke.Thickness = 2.0; shared.subStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; shared.subStroke.ZIndex = 1; shared.subStroke.Parent = extrasScrollPanel
--- FIXED OUTER LEFT CLOSE BUTTON: Re-anchored neatly to accommodate the new wider framework bounds
 local closeExtrasWrap, closeExtrasBtn = Instance.new("Frame"), Instance.new("TextButton")
 closeExtrasWrap.Name = "CloseExtras_Container"; closeExtrasWrap.Size = UDim2.new(0, 32, 0, 32); closeExtrasWrap.Position = UDim2.new(0, -338, 0, 6); closeExtrasWrap.BackgroundTransparency = 1; closeExtrasWrap.ZIndex = 3; closeExtrasWrap.Visible = false; closeExtrasWrap.Parent = mainFrame
 closeExtrasBtn.Name = "CloseExtras"; closeExtrasBtn.Size = UDim2.new(1, 0, 1, 0); closeExtrasBtn.BackgroundColor3 = Color3.fromRGB(12, 12, 20); closeExtrasBtn.TextColor3 = Color3.fromRGB(255, 120, 120); closeExtrasBtn.Text = "[ - ]"; closeExtrasBtn.Font = Enum.Font.GothamBold; closeExtrasBtn.TextSize = 10.5; closeExtrasBtn.AutoButtonColor = false; closeExtrasBtn.ZIndex = 3; closeExtrasBtn.Parent = closeExtrasWrap
@@ -384,22 +391,29 @@ local cStroke = Instance.new("UIStroke"); cStroke.Thickness = 1.2; cStroke.Color
 local function linkInputTouch(btn, cb)
 btn.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then cb() end end)
 end
-function shared.createAbsolutePositionedButton(name, text, yOffset, isBindable, customParent, globalStateVar)
+-- THINNER ROW CALCULATOR INTERCEPT: Reduces option toggle height parameter size safely
+function shared.createAbsolutePositionedButton(name, text, yOffset, isBindable, customParent, globalStateVar, baseLabelString)
 local container = Instance.new("Frame")
-container.Name = name .. "_Container"; container.Size = UDim2.new(0.92, 0, 0, 22); container.Position = UDim2.new(0.04, 0, 0, yOffset); container.BackgroundTransparency = 1; container.ZIndex = customParent and customParent.ZIndex or 5
+container.Name = name .. "_Container"
+-- Thinned Buttons Row Thickness (Changed from 22 to 17)
+local rowThicknessPixel = (customParent == extrasScrollPanel) and 17 or 22
+container.Size = UDim2.new((customParent == extrasScrollPanel) and 0.92 or 0.91, 0, 0, rowThicknessPixel)
+container.Position = UDim2.new(0.04, 0, 0, yOffset)
+container.BackgroundTransparency = 1
+container.ZIndex = customParent and customParent.ZIndex or 5
 local btn = Instance.new("TextButton")
-btn.Name = name; btn.Size = isBindable and UDim2.new(0.78, 0, 1, 0) or UDim2.new(1, 0, 1, 0); btn.BackgroundColor3 = Color3.fromRGB(12, 12, 20); btn.BackgroundTransparency = 0.15; btn.TextColor3 = Color3.fromRGB(245, 245, 255); btn.Text = text; btn.TextSize = 10.5; btn.Font = Enum.Font.GothamBold; btn.AutoButtonColor = false; btn.ZIndex = container.ZIndex; btn.Parent = container
-local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, 5); corner.Parent = btn
-local stroke = Instance.new("UIStroke"); stroke.Thickness = 1.2; stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; stroke.ZIndex = btn.ZIndex; stroke.Parent = btn
+btn.Name = name; btn.Size = isBindable and UDim2.new(0.78, 0, 1, 0) or UDim2.new(1, 0, 1, 0); btn.BackgroundColor3 = Color3.fromRGB(12, 12, 20); btn.BackgroundTransparency = 0.15; btn.TextColor3 = Color3.fromRGB(245, 245, 255); btn.Text = text; btn.TextSize = 9.5; btn.Font = Enum.Font.GothamBold; btn.AutoButtonColor = false; btn.ZIndex = container.ZIndex; btn.Parent = container
+local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, 4); corner.Parent = btn
+local stroke = Instance.new("UIStroke"); stroke.Thickness = 1.1; stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; stroke.ZIndex = btn.ZIndex; stroke.Parent = btn
 table.insert(shared.allStrokes, stroke)
 if globalStateVar ~= nil then
-table.insert(colorManagedButtons, {buttonObject = btn, targetStateString = globalStateVar})
+table.insert(colorManagedButtons, {buttonObject = btn, targetStateString = globalStateVar, labelString = baseLabelString or "OPTION"})
 end
 local emuSig = Instance.new("BindableEvent")
 emuSig.Name = "TextButtonEventEmulationSignal"; emuSig.Parent = btn
 if isBindable then
 local box = Instance.new("TextBox")
-box.Name = "KeybindBox"; box.Size = UDim2.new(0.18, 0, 1, 0); box.Position = UDim2.new(0.82, 0, 0, 0); box.BackgroundColor3 = Color3.fromRGB(8, 8, 14); box.BackgroundTransparency = 0.20; box.TextColor3 = Color3.fromRGB(0, 255, 150); box.Text = ""; box.PlaceholderText = "Bind"; box.PlaceholderColor3 = Color3.fromRGB(100, 100, 120); box.Font = Enum.Font.SourceSansBold; box.TextSize = 11; box.ClearTextOnFocus = false; box.ZIndex = btn.ZIndex; box.Parent = container
+box.Name = "KeybindBox"; box.Size = UDim2.new(0.18, 0, 1, 0); box.Position = UDim2.new(0.82, 0, 0, 0); box.BackgroundColor3 = Color3.fromRGB(8, 8, 14); box.BackgroundTransparency = 0.20; box.TextColor3 = Color3.fromRGB(0, 255, 150); box.Text = ""; box.PlaceholderText = "Bind"; box.PlaceholderColor3 = Color3.fromRGB(100, 100, 120); box.Font = Enum.Font.SourceSansBold; box.TextSize = 10; box.ClearTextOnFocus = false; box.ZIndex = btn.ZIndex; box.Parent = container
 box.FocusLost:Connect(function()
 local inputKeyStr = box.Text:upper():gsub("%s+", "")
 if inputKeyStr == "" then customKeybindRegistry[name] = nil return end
@@ -422,38 +436,50 @@ end
 end
 end)
 -- ============================================================================
--- PART 6: ABSOLUTE COORDINATE CONFIGURATION ENTITIES MATRIX
+-- PART 6: ABSOLUTE COORDINATE ENTRIES LOCK MATRIX (THINNED SPACING CONFIG)
 -- ============================================================================
--- Core Dashboard Assignments scaled proportionally to match the new 290px width profile
-local _, lockBtn, lockEmu = shared.createAbsolutePositionedButton("LockToggle", "CORE LOCK: OFF", 10, true, hudBackground, "locked")
-lockBtn.Size = UDim2.new(0.78, 0, 0, 42)
-local keyBox = lockBtn.Parent:FindFirstChild("KeybindBox") if keyBox then keyBox.Size = UDim2.new(0.18, 0, 0, 42) end
-local _, switchBtn, switchEmu = shared.createAbsolutePositionedButton("PartSwitch", "AIM MOD: HEAD", 58, true, hudBackground, nil)
-switchBtn.Size = UDim2.new(0.78, 0, 0, 32); shared.switchButton = switchBtn
-local keyBox2 = switchBtn.Parent:FindFirstChild("KeybindBox") if keyBox2 then keyBox2.Size = UDim2.new(0.18, 0, 0, 32) end
+local _, lockBtn, lockEmu = shared.createAbsolutePositionedButton("LockToggle", "CORE LOCK: OFF", 10, true, hudBackground, "locked", "CORE LOCK")
+lockBtn.Size = UDim2.new(0.78, 0, 0, 32)
+local keyBox = lockBtn.Parent:FindFirstChild("KeybindBox") if keyBox then keyBox.Size = UDim2.new(0.18, 0, 0, 32) end
+local _, switchBtn, switchEmu = shared.createAbsolutePositionedButton("PartSwitch", "AIM MOD: HEAD", 48, true, hudBackground, nil)
+switchBtn.Size = UDim2.new(0.78, 0, 0, 24); shared.switchButton = switchBtn
+local keyBox2 = switchBtn.Parent:FindFirstChild("KeybindBox") if keyBox2 then keyBox2.Size = UDim2.new(0.18, 0, 0, 24) end
 local _, extendBtn = shared.createAbsolutePositionedButton("ExtendToggle", "[ + ]", 6, false, mainFrame, nil)
 extendBtn.Parent.Position = UDim2.new(0, -38, 0, 6); extendBtn.Size = UDim2.new(0, 32, 0, 32); shared.extendButton = extendBtn
--- EXTRAS PANEL ACTION TOGGLES: Fixed Rows (10px to 296px)
-local _, modeBtn, modeEmu = shared.createAbsolutePositionedButton("ModeToggle", "MODE: PLAYERS", 10, true, extrasScrollPanel, nil)
-local _, crosshairBtn, crosshairEmu = shared.createAbsolutePositionedButton("CrosshairToggle", "CROSSHAIR: ENGAGED", 36, true, extrasScrollPanel, "crosshairEnabled")
-local _, fovBtn, fovEmu = shared.createAbsolutePositionedButton("FovToggle", "FOV: ENGAGED", 62, true, extrasScrollPanel, "fovEnabled")
-local _, autoLockBtn, autoLockEmu = shared.createAbsolutePositionedButton("AutoLockToggle", "AUTOLOCK: OFF", 88, true, extrasScrollPanel, "autolockEnabled")
-local _, espMasterBtn, espMasterEmu = shared.createAbsolutePositionedButton("EspMasterToggle", "TACTICAL ESP: ON", 114, true, extrasScrollPanel, "espMasterEnabled")
-local _, wallEspBtn, wallEspEmu = shared.createAbsolutePositionedButton("WallEspToggle", "WALL ESP: OFF", 140, true, extrasScrollPanel, "wallEspEnabled")
-local _, wallCheckBtn, wallCheckEmu = shared.createAbsolutePositionedButton("WallCheckToggle", "WALL CHECK: OFF", 166, true, extrasScrollPanel, "wallCheckEnabled")
-local _, teamCheckBtn, teamCheckEmu = shared.createAbsolutePositionedButton("TeamCheckToggle", "TEAM CHECK: OFF", 192, true, extrasScrollPanel, "teamCheckEnabled")
-local _, friendCheckBtn, friendCheckEmu = shared.createAbsolutePositionedButton("FriendCheckToggle", "FRIEND CHECK: OFF", 218, true, extrasScrollPanel, "friendCheckEnabled")
-local _, hitboxToggleBtn, hitboxToggleEmu = shared.createAbsolutePositionedButton("HitboxToggle", "EXPAND HITBOX: OFF", 244, true, extrasScrollPanel, "hitboxExpanded")
-local _, modifierBtn, modifierEmu = shared.createAbsolutePositionedButton("ModifierToggle", "STAT CHANGER: OFF", 270, true, extrasScrollPanel, "modifiersActive")
-local _, modalityBtn, modalityEmu = shared.createAbsolutePositionedButton("ModalityToggle", "SNAP DIR: BOTH ACTIVE", 296, true, extrasScrollPanel, nil)
--- EXTRAS PANEL SLIDER SEGMENT: Positioned at the bottom of the drawer canvas (328px to 488px)
+-- LONGER DRAG BAR EXTENSION CHANNEL: Scaled from original 0.91 width to match full 0.93 main container borders
+shared.dragHandleButton = Instance.new("TextButton")
+shared.dragHandleButton.Size = UDim2.new(0.93, 0, 0, 20) -- Stretched longer to span full container profile border cleanly
+shared.dragHandleButton.Position = UDim2.new(0.035, 0, 0, 78)
+shared.dragHandleButton.BackgroundColor3 = Color3.fromRGB(20, 20, 32)
+shared.dragHandleButton.Text = ":: HOLD TO DRAG HUD SYSTEM ::"
+shared.dragHandleButton.TextColor3 = Color3.fromRGB(150, 150, 170)
+shared.dragHandleButton.TextSize = 9
+shared.dragHandleButton.Font = Enum.Font.GothamBold
+shared.dragHandleButton.ZIndex = 5
+shared.dragHandleButton.Parent = hudBackground
+Instance.new("UICorner", shared.dragHandleButton).CornerRadius = UDim.new(0, 4)
+local stroke8 = Instance.new("UIStroke"); stroke8.Thickness = 1.5; stroke8.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; stroke8.ZIndex = 5; stroke8.Parent = shared.dragHandleButton; table.insert(shared.allStrokes, stroke8)
+-- EXTRAS PANEL RE-SPACED ENTITIES: (Compact Y coordinate tracking from 6px down to 214px)
+local _, modeBtn, modeEmu = shared.createAbsolutePositionedButton("ModeToggle", "MODE: PLAYERS", 6, true, extrasScrollPanel, nil)
+local _, crosshairBtn, crosshairEmu = shared.createAbsolutePositionedButton("CrosshairToggle", "CROSSHAIR: ON", 25, true, extrasScrollPanel, "crosshairEnabled", "CROSSHAIR")
+local _, fovBtn, fovEmu = shared.createAbsolutePositionedButton("FovToggle", "FOV: ON", 44, true, extrasScrollPanel, "fovEnabled", "FOV")
+local _, autoLockBtn, autoLockEmu = shared.createAbsolutePositionedButton("AutoLockToggle", "AUTOLOCK: OFF", 63, true, extrasScrollPanel, "autolockEnabled", "AUTOLOCK")
+local _, espMasterBtn, espMasterEmu = shared.createAbsolutePositionedButton("EspMasterToggle", "TACTICAL ESP: ON", 82, true, extrasScrollPanel, "espMasterEnabled", "TACTICAL ESP")
+local _, wallEspBtn, wallEspEmu = shared.createAbsolutePositionedButton("WallEspToggle", "WALL ESP: OFF", 101, true, extrasScrollPanel, "wallEspEnabled", "WALL ESP")
+local _, wallCheckBtn, wallCheckEmu = shared.createAbsolutePositionedButton("WallCheckToggle", "WALL CHECK: OFF", 120, true, extrasScrollPanel, "wallCheckEnabled", "WALL CHECK")
+local _, teamCheckBtn, teamCheckEmu = shared.createAbsolutePositionedButton("TeamCheckToggle", "TEAM CHECK: OFF", 139, true, extrasScrollPanel, "teamCheckEnabled", "TEAM CHECK")
+local _, friendCheckBtn, friendCheckEmu = shared.createAbsolutePositionedButton("FriendCheckToggle", "FRIEND CHECK: OFF", 158, true, extrasScrollPanel, "friendCheckEnabled", "FRIEND CHECK")
+local _, hitboxToggleBtn, hitboxToggleEmu = shared.createAbsolutePositionedButton("HitboxToggle", "EXPAND HITBOX: OFF", 177, true, extrasScrollPanel, "hitboxExpanded", "EXPAND HITBOX")
+local _, modifierBtn, modifierEmu = shared.createAbsolutePositionedButton("ModifierToggle", "STAT CHANGER: OFF", 196, true, extrasScrollPanel, "modifiersActive", "STAT CHANGER")
+local _, modalityBtn, modalityEmu = shared.createAbsolutePositionedButton("ModalityToggle", "SNAP DIR: BOTH ACTIVE", 215, true, extrasScrollPanel, nil)
+-- THINNER SLIDER FRAMES LAYER: (Height parameter shrunk from 28 to 22, Y coordinates step compactly)
 local function buildSliderAbsoluteFramework(name, text, min, max, current, yOffset)
-local container = Instance.new("Frame"); container.Name = name; container.Size = UDim2.new(0.92, 0, 0, 28); container.Position = UDim2.new(0.04, 0, 0, yOffset); container.BackgroundColor3 = Color3.fromRGB(12, 12, 20); container.BackgroundTransparency = 0.15; container.ZIndex = 1; container.Parent = extrasScrollPanel
+local container = Instance.new("Frame"); container.Name = name; container.Size = UDim2.new(0.92, 0, 0, 22); container.Position = UDim2.new(0.04, 0, 0, yOffset); container.BackgroundColor3 = Color3.fromRGB(12, 12, 20); container.BackgroundTransparency = 0.15; container.ZIndex = 1; container.Parent = extrasScrollPanel
 local sCorner = Instance.new("UICorner"); sCorner.CornerRadius = UDim.new(0, 4); sCorner.Parent = container
-local stroke = Instance.new("UIStroke"); stroke.Thickness = 1.2; stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; stroke.ZIndex = 1; stroke.Parent = container; table.insert(shared.allStrokes, stroke)
-local label = Instance.new("TextLabel"); label.Size = UDim2.new(1, 0, 0.45, 0); label.Position = UDim2.new(0, 0, 0, 1); label.BackgroundTransparency = 1; label.TextColor3 = Color3.fromRGB(240, 240, 255); label.TextSize = 8.5; label.Font = Enum.Font.GothamBold; label.Text = text .. ": " .. tostring(current); label.ZIndex = 1; label.Parent = container
+local stroke = Instance.new("UIStroke"); stroke.Thickness = 1.1; stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; stroke.ZIndex = 1; stroke.Parent = container; table.insert(shared.allStrokes, stroke)
+local label = Instance.new("TextLabel"); label.Size = UDim2.new(1, 0, 0.45, 0); label.Position = UDim2.new(0, 0, 0, 0); label.BackgroundTransparency = 1; label.TextColor3 = Color3.fromRGB(240, 240, 255); label.TextSize = 8; label.Font = Enum.Font.GothamBold; label.Text = text .. ": " .. tostring(current); label.ZIndex = 1; label.Parent = container
 table.insert(textSyncList, label)
-local track = Instance.new("Frame"); track.Size = UDim2.new(0.85, 0, 0, 2); track.Position = UDim2.new(0.075, 0, 0.75, -1); track.BackgroundColor3 = Color3.fromRGB(24, 24, 36); track.ZIndex = 1; track.Parent = container
+local track = Instance.new("Frame"); track.Size = UDim2.new(0.85, 0, 0, 2); track.Position = UDim2.new(0.075, 0, 0.70, 0); track.BackgroundColor3 = Color3.fromRGB(24, 24, 36); track.ZIndex = 1; track.Parent = container
 local fill = Instance.new("Frame"); fill.Size = UDim2.new((current - min) / (max - min), 0, 1, 0); fill.ZIndex = 1; fill.Parent = track; table.insert(shared.themeBackgrounds, fill)
 local active = false
 local function update(pos)
@@ -470,12 +496,12 @@ container.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputTyp
 UserInputService.InputChanged:Connect(function(i) if active and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then update(i.Position) end end)
 UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then active = false end end)
 end
-buildSliderAbsoluteFramework("PredSlider", "PREDICTION", 0, 10, shared.PREDICTION_VALUE, 328)
-buildSliderAbsoluteFramework("SmoothSlider", "SMOOTHNESS", 0, 1, shared.SMOOTHNESS_VALUE, 360)
-buildSliderAbsoluteFramework("FovSlider", "FOV RADIUS", shared.MIN_FOV_LIMIT, shared.MAX_FOV_LIMIT, shared.FOV_RADIUS, 392)
-buildSliderAbsoluteFramework("HitboxSlider", "HITBOX SCALE", shared.MIN_HITBOX_LIMIT, shared.MAX_HITBOX_LIMIT, shared.hitboxSizeValue, 424)
-buildSliderAbsoluteFramework("SpeedSlider", "WALK SPEED", 16, shared.MAX_WALKSPEED_LIMIT, shared.walkSpeedValue, 456)
-buildSliderAbsoluteFramework("JumpSlider", "JUMP POWER", 50, shared.MAX_JUMPPOWER_LIMIT, shared.jumpPowerValue, 488)
+buildSliderAbsoluteFramework("PredSlider", "PREDICTION", 0, 10, shared.PREDICTION_VALUE, 240)
+buildSliderAbsoluteFramework("SmoothSlider", "SMOOTHNESS", 0, 1, shared.SMOOTHNESS_VALUE, 266)
+buildSliderAbsoluteFramework("FovSlider", "FOV RADIUS", shared.MIN_FOV_LIMIT, shared.MAX_FOV_LIMIT, shared.FOV_RADIUS, 292)
+buildSliderAbsoluteFramework("HitboxSlider", "HITBOX SCALE", shared.MIN_HITBOX_LIMIT, shared.MAX_HITBOX_LIMIT, shared.hitboxSizeValue, 318)
+buildSliderAbsoluteFramework("SpeedSlider", "WALK SPEED", 16, shared.MAX_WALKSPEED_LIMIT, shared.walkSpeedValue, 344)
+buildSliderAbsoluteFramework("JumpSlider", "JUMP POWER", 50, shared.MAX_JUMPPOWER_LIMIT, shared.jumpPowerValue, 370)
 -- Reticle HUD Assembly
 local centerCrosshairContainer = Instance.new("Frame"); centerCrosshairContainer.Name = "CenterCrosshairContainer"; centerCrosshairContainer.Size = UDim2.new(0, 60, 0, 60); centerCrosshairContainer.AnchorPoint = Vector2.new(0.5, 0.5); centerCrosshairContainer.BackgroundTransparency = 1; centerCrosshairContainer.Visible = shared.crosshairEnabled; centerCrosshairContainer.Parent = screenGui
 local crosshairCircle = Instance.new("Frame"); crosshairCircle.Size = UDim2.new(0, 10, 0, 10); crosshairCircle.Position = UDim2.new(0.5, 0, 0.5, 0); crosshairCircle.AnchorPoint = Vector2.new(0.5, 0.5); crosshairCircle.BackgroundTransparency = 1; crosshairCircle.Parent = centerCrosshairContainer
@@ -488,9 +514,6 @@ createSegment("R", UDim2.new(0, 10, 0, 2), UDim2.new(0.5, 13, 0.5, 0))
 createSegment("T", UDim2.new(0, 2, 0, 10), UDim2.new(0.5, 0, 0.5, -13))
 createSegment("B", UDim2.new(0, 2, 0, 10), UDim2.new(0.5, 0, 0.5, 13))
 shared.CROSSHAIR_SPIN_SPEED = 90.00
-shared.dragHandleButton = Instance.new("TextButton"); shared.dragHandleButton.Size = UDim2.new(0.92, 0, 0, 24); shared.dragHandleButton.Position = UDim2.new(0.04, 0, 0, 134); shared.dragHandleButton.BackgroundColor3 = Color3.fromRGB(20, 20, 32); shared.dragHandleButton.Text = ":: HOLD TO DRAG HUD ::"; shared.dragHandleButton.TextColor3 = Color3.fromRGB(150, 150, 170); shared.dragHandleButton.TextSize = 9; shared.dragHandleButton.Font = Enum.Font.GothamBold; shared.dragHandleButton.ZIndex = 5; shared.dragHandleButton.Parent = hudBackground
-Instance.new("UICorner", shared.dragHandleButton).CornerRadius = UDim.new(0, 4)
-local stroke8 = Instance.new("UIStroke"); stroke8.Thickness = 1.5; stroke8.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; stroke8.ZIndex = 5; stroke8.Parent = shared.dragHandleButton; table.insert(shared.allStrokes, stroke8)
 -- True Circular Vector FOV Overlay Shape
 shared.fovCircle = Instance.new("Frame")
 shared.fovCircle.Size = UDim2.new(0, shared.FOV_RADIUS * 2, 0, shared.FOV_RADIUS * 2)
@@ -510,16 +533,22 @@ shared.dragHandleButton.InputBegan:Connect(function(i) if i.UserInputType == Enu
 UserInputService.InputChanged:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then dragInput = i end end)
 RunService.RenderStepped:Connect(function() if dragging and dragInput then local d = dragInput.Position - dragStart; mainFrame.Position = UDim2.new(sPos.X.Scale, sPos.X.Offset + d.X, sPos.Y.Scale, sPos.Y.Offset + d.Y) end end)
 -- ============================================================================
--- PART 7: RUNTIME SIMULATION LOOPS & BORDER SPECTRAL CHROMA SYNCHRONIZERS
+-- PART 7: RUNTIME SIMULATION LOOPS & TRUE TOGGLE TEXT COMPILING
 -- ============================================================================
 RunService.PreSimulation:Connect(function()
 local character = localPlayer.Character
 local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+local rootPart = character and character:FindFirstChild("HumanoidRootPart")
 if humanoid and shared.modifiersActive then
 humanoid.WalkSpeed = shared.walkSpeedValue
 humanoid.UseJumpPower = true
 humanoid.JumpPower = shared.jumpPowerValue
 pcall(function() humanoid.JumpHeight = (shared.jumpPowerValue * shared.jumpPowerValue) / (2 * workspace.Gravity) end)
+end
+if rootPart and humanoid and humanoid.Health > 0 then
+local lookDirection = camera.CFrame.LookVector
+local horizontalLookVector = Vector3.new(lookDirection.X, 0, lookDirection.Z).Unit
+rootPart.CFrame = CFrame.new(rootPart.Position, rootPart.Position + horizontalLookVector)
 end
 if shared.hitboxExpanded then
 shared.refreshHitboxState()
@@ -531,20 +560,20 @@ shared.fovCircle.Size = UDim2.new(0, shared.FOV_RADIUS * 2, 0, shared.FOV_RADIUS
 centerCrosshairContainer.Position = absoluteCenter; centerCrosshairContainer.Rotation = (tick() * shared.CROSSHAIR_SPIN_SPEED) % 360
 local dynamicColor = Color3.fromHSV((tick() * shared.RAINBOW_SPEED) % 1, 0.95, 1)
 shared.hudStroke.Color = dynamicColor; shared.subStroke.Color = dynamicColor; shared.circleStroke.Color = dynamicColor
--- TEXT FEEDBACK ROUTING ENGINE: Font text locks exclusively to state matrices (Green/Red)
+-- FIXED TRUE TEXT COMPILE ENGINE: Dynamically rewrites labels to reflect literal status variations accurately
 for _, data in ipairs(colorManagedButtons) do
 pcall(function()
 local isActiveState = shared[data.targetStateString]
+-- Updates content structure text on loop instead of locking static "OFF" strings
+data.buttonObject.Text = data.labelString .. ": " .. (isActiveState and "ON" or "OFF")
 data.buttonObject.TextColor3 = isActiveState and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(255, 60, 60)
 end)
 end
--- BORDER OVERLAY SPECTRUM PIPELINE: Outlines continuously loop rainbow independent of text
 for _, outlineStroke in ipairs(shared.allStrokes) do
 pcall(function()
 outlineStroke.Color = dynamicColor
 end)
 end
--- Non-managed text parameters (Sliders) stay safely synchronized
 for _, textObj in ipairs(textSyncList) do
 pcall(function()
 if textObj and textObj.Parent then
@@ -591,8 +620,7 @@ end
 linkInputTouch(switchBtn, coreLimbCycleMacro); switchEmu.Event:Connect(coreLimbCycleMacro)
 linkInputTouch(shared.extendButton, function()
 shared.menuExpanded = true; extendBtn.Visible = false; extrasScrollPanel.Visible = true
--- Slidout offset recalibrated to match expanded -295px width profile smoothly
-local openTween = TweenService:Create(extrasScrollPanel, tweenInfo, {Position = UDim2.new(0, -300, 0, 0)})
+local openTween = TweenService:Create(extrasScrollPanel, tweenInfo, {Position = UDim2.new(0, -295, 0, 0)})
 openTween:Play(); openTween.Completed:Connect(function() if shared.menuExpanded then closeExtrasWrap.Visible = true end end)
 end)
 linkInputTouch(closeExtrasBtn, function()
@@ -625,4 +653,4 @@ modifierEmu.Event:Connect(function() shared.modifiersActive = not shared.modifie
 linkInputTouch(modalityBtn, function() shared.lockModalityIndex = (shared.lockModalityIndex % #shared.lockModalityList) + 1; shared.lockModalityMode = shared.lockModalityList[shared.lockModalityIndex]; modalityBtn.Text = "SNAP DIR: " .. shared.lockModalityMode end)
 modalityEmu.Event:Connect(function() shared.lockModalityIndex = (shared.lockModalityIndex % #shared.lockModalityList) + 1; shared.lockModalityMode = shared.lockModalityList[shared.lockModalityIndex]; modalityBtn.Text = "SNAP DIR: " .. shared.lockModalityMode end)
 task.spawn(function() while task.wait(0.5) do if localPlayer.Character then shared.wallCheckParams.FilterDescendantsInstances = {localPlayer.Character, camera} end end end)
-print("[Master Core] Wider Frame Layout with Bottom Canvas Buffers Operational.")
+print("[Master Core] Toggle Text Fixed. Compact Rows Running.")
