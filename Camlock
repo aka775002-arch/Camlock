@@ -94,6 +94,7 @@ function shared.resolveTargetPart(char)
 	return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChildOfClass("Part")
 end
 
+-- Dynamic structural cleanup ensuring parts match layout types cleanly
 local function revertSinglePart(part)
 	local data = shared.originalHitboxData[part]
 	if data and part and part.Parent then
@@ -103,41 +104,6 @@ local function revertSinglePart(part)
 		part.Massless = data.Massless
 	end
 	shared.originalHitboxData[part] = nil
-end
-
-function shared.applyHitboxExpansion(char, pObj)
-	if not char or char == localPlayer.Character then return end
-	
-	local hum = char:FindFirstChildOfClass("Humanoid")
-	local part = shared.resolveTargetPart(char)
-	
-	if not hum or hum.Health <= 0 then
-		if part and shared.originalHitboxData[part] then
-			revertSinglePart(part)
-		end
-		return
-	end
-	
-	if part and part:IsA("BasePart") then
-		if pObj then
-			if shared.friendCheckEnabled and localPlayer:IsFriendsWith(pObj.UserId) then return end
-			if shared.teamCheckEnabled and localPlayer.Team and pObj.Team and (localPlayer.Team == pObj.Team) then return end
-		end
-		
-		if not shared.originalHitboxData[part] then
-			shared.originalHitboxData[part] = {
-				Size = part.Size,
-				Transparency = part.Transparency,
-				CanCollide = part.CanCollide,
-				Massless = part.Massless
-			}
-		end
-		
-		part.Size = Vector3.new(shared.hitboxSizeValue, shared.hitboxSizeValue, shared.hitboxSizeValue)
-		part.Transparency = 0.65
-		part.CanCollide = false
-		part.Massless = true
-	end
 end
 
 function shared.revertAllHitboxes()
@@ -152,25 +118,85 @@ function shared.revertAllHitboxes()
 	table.clear(shared.originalHitboxData)
 end
 
+function shared.applyHitboxExpansion(char, pObj)
+	if not char or char == localPlayer.Character then return end
+	
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	local activePart = shared.resolveTargetPart(char)
+	
+	if not hum or hum.Health <= 0 then
+		if activePart and shared.originalHitboxData[activePart] then
+			revertSinglePart(activePart)
+		end
+		return
+	end
+	
+	-- Strict Verification: Clean up non-targeted parts immediately if they were modified
+	for part, _ in pairs(shared.originalHitboxData) do
+		if part and part.Parent == char and part ~= activePart then
+			revertSinglePart(part)
+		end
+	end
+	
+	if activePart and activePart:IsA("BasePart") then
+		if pObj then
+			if shared.friendCheckEnabled and localPlayer:IsFriendsWith(pObj.UserId) then return end
+			if shared.teamCheckEnabled and localPlayer.Team and pObj.Team and (localPlayer.Team == pObj.Team) then return end
+		end
+		
+		if not shared.originalHitboxData[activePart] then
+			shared.originalHitboxData[activePart] = {
+				Size = activePart.Size,
+				Transparency = activePart.Transparency,
+				CanCollide = activePart.CanCollide,
+				Massless = activePart.Massless
+			}
+		end
+		
+		activePart.Size = Vector3.new(shared.hitboxSizeValue, shared.hitboxSizeValue, shared.hitboxSizeValue)
+		activePart.Transparency = 0.65
+		activePart.CanCollide = false
+		activePart.Massless = true
+	end
+end
+
 function shared.refreshHitboxState()
 	if not shared.hitboxExpanded then 
 		shared.revertAllHitboxes()
 		return 
 	end
 	
+	-- Loop structural matrices dynamically resolving target states
+	local currentEntities = {}
 	if shared.targetMode == "Players" or shared.targetMode == "All" then
 		for _, p in ipairs(Players:GetPlayers()) do
 			if p ~= localPlayer and p.Character then
-				shared.applyHitboxExpansion(p.Character, p)
+				currentEntities[p.Character] = p
 			end
 		end
 	end
 	if shared.targetMode == "NPCs" or shared.targetMode == "All" then
 		for _, d in ipairs(workspace:GetDescendants()) do
 			if d:IsA("Model") and d:FindFirstChildOfClass("Humanoid") and d ~= localPlayer.Character and not Players:GetPlayerFromCharacter(d) then
-				shared.applyHitboxExpansion(d, nil)
+				currentEntities[d] = false
 			end
 		end
+	end
+	
+	-- Global check: Remove older modifications from characters who are no longer targeted
+	for part, _ in pairs(shared.originalHitboxData) do
+		if part and part.Parent then
+			if not currentEntities[part.Parent] then
+				revertSinglePart(part)
+			end
+		else
+			shared.originalHitboxData[part] = nil
+		end
+	end
+	
+	-- Apply current configuration matrix parameters to matching elements
+	for char, pObj in pairs(currentEntities) do
+		shared.applyHitboxExpansion(char, pObj or nil)
 	end
 end
 
@@ -234,8 +260,7 @@ function shared.clearTargetEsp()
 	table.clear(shared.activeEspStorage)
 end
 
-local function getEquippedWeapon(plr)
-	local char = plr.Character
+local function getEquippedWeapon(char)
 	if char then
 		local tool = char:FindFirstChildOfClass("Tool")
 		if tool then
@@ -245,46 +270,42 @@ local function getEquippedWeapon(plr)
 	return "UNARMED"
 end
 
-function shared.makeEsp(plr)
-	if not plr or plr == localPlayer or not plr.Character then return end
-	local char = plr.Character
-	local identifier = plr.Name .. "_ESP"
+function shared.makeEsp(obj, isPlayer)
+	if not obj or obj == localPlayer or obj == localPlayer.Character then return end
+	local char = isPlayer and obj.Character or obj
+	if not char then return end
 	
-	local existing = CoreGui:FindFirstChild(identifier)
-	if existing then existing:Destroy() end
-	
-	local ESPholder = Instance.new("Folder")
-	ESPholder.Name = identifier
-	ESPholder.Parent = CoreGui
-	
-	local characterHighlight = Instance.new("Highlight")
-	characterHighlight.Name = "EspOutline"
-	characterHighlight.Adornee = char
-	characterHighlight.FillTransparency = 0.85
-	characterHighlight.OutlineTransparency = 0.15
-	characterHighlight.Parent = ESPholder
-
-	local adornments = {}
-	
-	for _, part in pairs(char:GetChildren()) do
-		if part:IsA("BasePart") then
-			local box = Instance.new("BoxHandleAdornment")
-			box.Name = part.Name
-			box.Parent = ESPholder
-			box.Adornee = part
-			box.AlwaysOnTop = true
-			box.ZIndex = 10
-			box.Size = part.Size
-			box.Transparency = 0.35
-			table.insert(adornments, box)
-		end
-	end
-	
-	local head = char:FindFirstChild("Head")
-	if head then
-		local BillboardGui = Instance.new("BillboardGui")
-		local TextLabel = Instance.new("TextLabel")
-		BillboardGui.Adornee = head
+	local identifier = (isPlayer and obj.Name or obj.Name .. "_" .. tostring(obj:GetDebugId())) .. "_ESP"
+local existing = CoreGui:FindFirstChild(identifier)
+if existing then existing:Destroy() end
+local ESPholder = Instance.new("Folder")
+ESPholder.Name = identifier
+ESPholder.Parent = CoreGui
+local characterHighlight = Instance.new("Highlight")
+characterHighlight.Name = "EspOutline"
+characterHighlight.Adornee = char
+characterHighlight.FillTransparency = 0.85
+characterHighlight.OutlineTransparency = 0.15
+characterHighlight.Parent = ESPholder
+local adornments = {}
+for _, part in pairs(char:GetChildren()) do
+if part:IsA("BasePart") then
+local box = Instance.new("BoxHandleAdornment")
+box.Name = part.Name
+box.Parent = ESPholder
+box.Adornee = part
+box.AlwaysOnTop = true
+box.ZIndex = 10
+box.Size = part.Size
+box.Transparency = 0.35
+table.insert(adornments, box)
+end
+end
+local head = char:FindFirstChild("Head")
+if head then
+local BillboardGui = Instance.new("BillboardGui")
+local TextLabel = Instance.new("TextLabel")
+BillboardGui.Adornee = head
 BillboardGui.Name = "EspBillboard"
 BillboardGui.Parent = ESPholder
 BillboardGui.Size = UDim2.new(0, 150, 0, 150)
@@ -299,12 +320,13 @@ TextLabel.TextSize = 16
 TextLabel.TextStrokeTransparency = 0
 TextLabel.TextYAlignment = Enum.TextYAlignment.Bottom
 TextLabel.ZIndex = 10
-shared.activeEspStorage[plr] = {
+shared.activeEspStorage[obj] = {
 folder = ESPholder,
 label = TextLabel,
 highlight = characterHighlight,
 boxes = adornments,
-characterLink = char
+characterLink = char,
+isPlayerType = isPlayer
 }
 end
 end
@@ -313,38 +335,60 @@ if not shared.espMasterEnabled then
 shared.clearTargetEsp()
 return
 end
+if shared.targetMode == "Players" or shared.targetMode == "All" then
 for _, p in ipairs(Players:GetPlayers()) do
 if p ~= localPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChildOfClass("Humanoid") then
 if not shared.activeEspStorage[p] or shared.activeEspStorage[p].characterLink ~= p.Character then
-shared.makeEsp(p)
+shared.makeEsp(p, true)
+end
+end
+end
+end
+if shared.targetMode == "NPCs" or shared.targetMode == "All" then
+for _, d in ipairs(workspace:GetDescendants()) do
+if d:IsA("Model") and d:FindFirstChild("HumanoidRootPart") and d:FindFirstChildOfClass("Humanoid") and d ~= localPlayer.Character and not Players:GetPlayerFromCharacter(d) then
+if not shared.activeEspStorage[d] or shared.activeEspStorage[d].characterLink ~= d then
+shared.makeEsp(d, false)
+end
 end
 end
 end
 local localRoot = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
 local currentRainbowColor = Color3.fromHSV((tick() * shared.RAINBOW_SPEED) % 1, 0.95, 1)
-for plr, data in pairs(shared.activeEspStorage) do
+for obj, data in pairs(shared.activeEspStorage) do
 local char = data.characterLink
 local folder = data.folder
-if not char.Parent or not folder.Parent then
+local targetModeMismatch = false
+if shared.targetMode == "Players" and not data.isPlayerType then targetModeMismatch = true end
+if shared.targetMode == "NPCs" and data.isPlayerType then targetModeMismatch = true end
+if not char.Parent or not folder.Parent or targetModeMismatch then
 if folder then folder:Destroy() end
-shared.activeEspStorage[plr] = nil
+shared.activeEspStorage[obj] = nil
 continue
 end
 local hum = char:FindFirstChildOfClass("Humanoid")
 local root = char:FindFirstChild("HumanoidRootPart")
 if hum and root and localRoot and hum.Health > 0 then
 local distance = math.floor((localRoot.Position - root.Position).Magnitude)
-local currentWeapon = getEquippedWeapon(plr)
-data.label.Text = string.format("[%s]\nName: %s | HP: %s | Studs: %d", currentWeapon, plr.Name, string.format("%.1f", hum.Health), distance)
+local currentWeapon = getEquippedWeapon(char)
+local entityName = data.isPlayerType and obj.Name or char.Name
+data.label.Text = string.format("[%s]\nName: %s | HP: %s | Studs: %d", currentWeapon, entityName, string.format("%.1f", hum.Health), distance)
 local assignedColor = Color3.fromRGB(255, 60, 60)
-local isTeammate = localPlayer.Team and plr.Team and (localPlayer.Team == plr.Team)
-local isFriend = localPlayer:IsFriendsWith(plr.UserId)
+if data.isPlayerType then
+local isTeammate = localPlayer.Team and obj.Team and (localPlayer.Team == obj.Team)
+local isFriend = localPlayer:IsFriendsWith(obj.UserId)
 if isTeammate then
 assignedColor = currentRainbowColor
 elseif isFriend then
 assignedColor = Color3.fromRGB(60, 255, 60)
 elseif shared.wallEspEnabled and shared.isWallBetween(root) then
 assignedColor = Color3.fromRGB(0, 120, 255)
+end
+else
+assignedColor = Color3.fromRGB(235, 180, 40)
+if shared.wallEspEnabled and shared.isWallBetween(root) then
+assignedColor = Color3.fromRGB(160, 110, 20)
+end
 end
 if data.highlight then
 data.highlight.OutlineColor = assignedColor
@@ -358,7 +402,7 @@ end
 end
 else
 if folder then folder:Destroy() end
-shared.activeEspStorage[plr] = nil
+shared.activeEspStorage[obj] = nil
 end
 end
 end
@@ -412,7 +456,6 @@ shared.closeExtrasButton.Position = UDim2.new(-1.45, 0, 0.5, -16); shared.closeE
 local uiListLayout = Instance.new("UIListLayout"); uiListLayout.Padding = UDim.new(0, 6); uiListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center; uiListLayout.VerticalAlignment = Enum.VerticalAlignment.Center; uiListLayout.Parent = hudBackground
 local subListLayout = Instance.new("UIListLayout"); subListLayout.Padding = UDim.new(0, 4); subListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center; subListLayout.VerticalAlignment = Enum.VerticalAlignment.Top; subListLayout.Parent = subPanel
 local subPadding = Instance.new("UIPadding"); subPadding.PaddingTop = UDim.new(0, 6); subPadding.PaddingBottom = UDim.new(0, 20); subPadding.Parent = subPanel
--- Re-ordered Configuration Interface Toggles Matrix
 shared.modeButton = shared.createTacticalButton("ModeToggle", "MODE: PLAYERS", UDim2.new(0.92, 0, 0, 22)); shared.modeButton.Parent = subPanel
 shared.crosshairToggleButton = shared.createTacticalButton("CrosshairToggle", "CROSSHAIR: ENGAGED", UDim2.new(0.92, 0, 0, 20)); shared.crosshairToggleButton.TextColor3 = Color3.fromRGB(0, 255, 255); shared.crosshairToggleButton.Parent = subPanel
 shared.fovToggleButton = shared.createTacticalButton("FovToggle", "FOV: ENGAGED", UDim2.new(0.92, 0, 0, 20)); shared.fovToggleButton.TextColor3 = Color3.fromRGB(0, 255, 255); shared.fovToggleButton.Parent = subPanel
@@ -446,7 +489,6 @@ shared.smoothFill = buildSliderFramework("SmoothSlider", "SMOOTHNESS", 0, 1, sha
 shared.sliderFill = buildSliderFramework("FovSlider", "FOV RADIUS", shared.MIN_FOV_LIMIT, shared.MAX_FOV_LIMIT, shared.FOV_RADIUS, function(v, l) shared.FOV_RADIUS = math.floor(v) l.Text = "FOV RADIUS: " .. shared.FOV_RADIUS .. "px" end)
 shared.hitboxToggleButton = shared.createTacticalButton("HitboxToggle", "EXPAND HITBOX: OFF", UDim2.new(0.92, 0, 0, 20)); shared.hitboxToggleButton.Parent = subPanel
 shared.hitboxFill = buildSliderFramework("HitboxSlider", "HITBOX SCALE", shared.MIN_HITBOX_LIMIT, shared.MAX_HITBOX_LIMIT, shared.hitboxSizeValue, function(v, l) shared.hitboxSizeValue = v l.Text = "HITBOX SCALE: " .. string.format("%.1f", v) end)
--- Re-ordered Stat Modifiers Sorting Stack
 shared.modifierButton = shared.createTacticalButton("ModifierToggle", "STAT CHANGER: OFF", UDim2.new(0.92, 0, 0, 22)); shared.modifierButton.TextColor3 = Color3.fromRGB(255, 100, 100); shared.modifierButton.Parent = subPanel
 shared.speedFill = buildSliderFramework("SpeedSlider", "WALK SPEED", 16, shared.MAX_WALKSPEED_LIMIT, shared.walkSpeedValue, function(v, l) shared.walkSpeedValue = math.floor(v) l.Text = "WALK SPEED: " .. shared.walkSpeedValue end)
 shared.jumpFill = buildSliderFramework("JumpSlider", "JUMP POWER", 50, shared.MAX_JUMPPOWER_LIMIT, shared.jumpPowerValue, function(v, l) shared.jumpPowerValue = math.floor(v) l.Text = "JUMP POWER: " .. shared.jumpPowerValue end)
@@ -480,14 +522,12 @@ local absoluteCenter = UDim2.new(0, camera.ViewportSize.X / 2, 0, camera.Viewpor
 shared.fovCircle.Size = UDim2.new(0, shared.FOV_RADIUS * 2, 0, shared.FOV_RADIUS * 2); shared.fovCircle.Position = absoluteCenter
 centerCrosshairContainer.Position = absoluteCenter
 centerCrosshairContainer.Rotation = (tick() * shared.CROSSHAIR_SPIN_SPEED) % 360
--- Highly Stable Humanoid Override (Continuous Dynamic Re-Injection Mapping)
 local char = localPlayer.Character
 local hum = char and char:FindFirstChildOfClass("Humanoid")
 if hum and shared.modifiersActive then
 hum.WalkSpeed = shared.walkSpeedValue
 hum.UseJumpPower = true
 hum.JumpPower = shared.jumpPowerValue
--- Direct mathematical simulation forcing height parameters safely over server checks
 local computedHeight = (shared.jumpPowerValue * shared.jumpPowerValue) / (2 * workspace.Gravity)
 pcall(function() hum.JumpHeight = computedHeight end)
 end
@@ -503,6 +543,19 @@ shared.updateEspSectors()
 shared.refreshHitboxState()
 for _, stroke in ipairs(shared.allStrokes) do stroke.Color = dynamicColor end
 for _, segment in ipairs(shared.crosshairLines) do segment.BackgroundColor3 = dynamicColor end
+end)
+RunService.Stepped:Connect(function()
+if shared.hitboxExpanded then
+for part, _ in pairs(shared.originalHitboxData) do
+if part and part.Parent then
+local char = part.Parent
+local hum = char:FindFirstChildOfClass("Humanoid")
+if hum and hum.Health > 0 then
+part.CanCollide = false
+end
+end
+end
+end
 end)
 shared.lockConnection = RunService.RenderStepped:Connect(function()
 local hasTarget = shared.target and shared.target.Parent
@@ -545,12 +598,17 @@ linkInputTouch(shared.textButton, function()
 if shared.locked then shared.locked = false; shared.target = nil; shared.textButton.Text = "CORE LOCK: OFF"; shared.textButton.TextColor3 = Color3.fromRGB(255, 60, 60); shared.autolockCooldownActive = true; task.delay(shared.COOLDOWN_DURATION, function() shared.autolockCooldownActive = false end)
 else local acq = shared.getClosestTarget(); if acq then shared.target = acq; shared.locked = true; shared.textButton.Text = "CORE LOCK: ACTIVE"; shared.textButton.TextColor3 = Color3.fromRGB(0, 255, 150) end end
 end)
-linkInputTouch(shared.switchButton, function() shared.targetPartIndex = (shared.targetPartIndex % #shared.targetPartList) + 1; shared.targetPartName = shared.targetPartList[shared.targetPartIndex]; shared.switchButton.Text = "AIM MOD: " .. shared.targetPartName:upper() end)
+linkInputTouch(shared.switchButton, function()
+shared.targetPartIndex = (shared.targetPartIndex % #shared.targetPartList) + 1
+shared.targetPartName = shared.targetPartList[shared.targetPartIndex]
+shared.switchButton.Text = "AIM MOD: " .. shared.targetPartName:upper()
+if shared.hitboxExpanded then shared.refreshHitboxState() end
+end)
 linkInputTouch(shared.modeButton, function()
 shared.targetMode = (shared.targetMode == "Players" and "NPCs") or (shared.targetMode == "NPCs" and "All") or "Players"
 shared.modeButton.Text = "MODE: " .. shared.targetMode:upper()
 shared.clearTargetEsp()
-if shared.hitboxExpanded then shared.revertAllHitboxes() shared.refreshHitboxState() end
+if shared.hitboxExpanded then shared.refreshHitboxState() end
 end)
 linkInputTouch(shared.crosshairToggleButton, function() shared.crosshairEnabled = not shared.crosshairEnabled; centerCrosshairContainer.Visible = shared.crosshairEnabled; shared.crosshairToggleButton.Text = shared.crosshairEnabled and "CROSSHAIR: ENGAGED" or "CROSSHAIR: OFF" end)
 linkInputTouch(shared.fovToggleButton, function() shared.fovEnabled = not shared.fovEnabled; shared.fovCircle.Visible = shared.fovEnabled; shared.fovToggleButton.Text = shared.fovEnabled and "FOV: ENGAGED" or "FOV: DISABLED" end)
@@ -558,8 +616,8 @@ linkInputTouch(shared.autoLockButton, function() shared.autolockEnabled = not sh
 linkInputTouch(shared.espMasterButton, function() shared.espMasterEnabled = not shared.espMasterEnabled; shared.espMasterButton.Text = shared.espMasterEnabled and "TACTICAL ESP: ON" or "TACTICAL ESP: OFF" end)
 linkInputTouch(shared.wallEspButton, function() shared.wallEspEnabled = not shared.wallEspEnabled; shared.wallEspButton.Text = shared.wallEspEnabled and "WALL ESP: ON" or "WALL ESP: OFF" end)
 linkInputTouch(shared.wallCheckButton, function() shared.wallCheckEnabled = not shared.wallCheckEnabled; shared.wallCheckButton.Text = shared.wallCheckEnabled and "WALL CHECK: ON" or "WALL CHECK: OFF" end)
-linkInputTouch(shared.teamCheckButton, function() shared.teamCheckEnabled = not shared.teamCheckEnabled; shared.teamCheckButton.Text = shared.teamCheckEnabled and "TEAM CHECK: ON" or "TEAM CHECK: OFF"; if shared.hitboxExpanded then shared.revertAllHitboxes() shared.refreshHitboxState() end end)
-linkInputTouch(shared.friendCheckButton, function() shared.friendCheckEnabled = not shared.friendCheckEnabled; shared.friendCheckButton.Text = shared.friendCheckEnabled and "FRIEND CHECK: ON" or "FRIEND CHECK: OFF"; if shared.hitboxExpanded then shared.revertAllHitboxes() shared.refreshHitboxState() end end)
+linkInputTouch(shared.teamCheckButton, function() shared.teamCheckEnabled = not shared.teamCheckEnabled; shared.teamCheckButton.Text = shared.teamCheckEnabled and "TEAM CHECK: ON" or "TEAM CHECK: OFF"; if shared.hitboxExpanded then shared.refreshHitboxState() end end)
+linkInputTouch(shared.friendCheckButton, function() shared.friendCheckEnabled = not shared.friendCheckEnabled; shared.friendCheckButton.Text = shared.friendCheckEnabled and "FRIEND CHECK: ON" or "FRIEND CHECK: OFF"; if shared.hitboxExpanded then shared.refreshHitboxState() end end)
 linkInputTouch(shared.hitboxToggleButton, function() shared.hitboxExpanded = not shared.hitboxExpanded; shared.hitboxToggleButton.Text = shared.hitboxExpanded and "EXPAND HITBOX: ON" or "EXPAND HITBOX: OFF"; shared.refreshHitboxState() end)
 linkInputTouch(shared.modifierButton, function()
 shared.modifiersActive = not shared.modifiersActive; shared.modifierButton.Text = shared.modifiersActive and "STAT CHANGER: ACTIVE" or "STAT CHANGER: OFF"
