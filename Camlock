@@ -21,10 +21,10 @@ shared.MAX_SMOOTHNESS_LIMIT = 1.00
 shared.PREDICTION_VALUE = 0.00
 shared.MAX_PREDICTION_LIMIT = 10.00
 
--- Hitbox System Configurations
+-- Hitbox System Configurations (MAX LIMIT EXTENDED TO 120 FOR MAXIMUM REACH)
 shared.hitboxExpanded = false
-shared.hitboxSizeValue = 10.0
-shared.MAX_HITBOX_LIMIT = 30.0
+shared.hitboxSizeValue = 15.0
+shared.MAX_HITBOX_LIMIT = 120.0
 shared.MIN_HITBOX_LIMIT = 2.0
 shared.originalHitboxData = {} 
 
@@ -218,7 +218,6 @@ function shared.clearTargetEsp()
 	table.clear(shared.activeEspStorage)
 end
 
--- Telemetry parser to actively check character structures for inventory weapons
 local function getEquippedWeapon(plr)
 	local char = plr.Character
 	if char then
@@ -283,7 +282,7 @@ function shared.makeEsp(plr)
 		TextLabel.Font = Enum.Font.SourceSansSemibold
 		TextLabel.TextSize = 16
 		TextLabel.TextStrokeTransparency = 0
-TextLabel.TextYAlignment = Enum.TextYAlignment.Bottom
+		TextLabel.TextYAlignment = Enum.TextYAlignment.Bottom
 TextLabel.ZIndex = 10
 shared.activeEspStorage[plr] = {
 folder = ESPholder,
@@ -321,7 +320,6 @@ local root = char:FindFirstChild("HumanoidRootPart")
 if hum and root and localRoot and hum.Health > 0 then
 local distance = math.floor((localRoot.Position - root.Position).Magnitude)
 local currentWeapon = getEquippedWeapon(plr)
--- Multi-line formatting processing tool items stacked above target configurations
 data.label.Text = string.format("[%s]\nName: %s | HP: %s | Studs: %d", currentWeapon, plr.Name, string.format("%.1f", hum.Health), distance)
 local assignedColor = Color3.fromRGB(255, 60, 60)
 local isTeammate = localPlayer.Team and plr.Team and (localPlayer.Team == plr.Team)
@@ -434,7 +432,6 @@ print("[Part 5/8] Interface Assets Anchored.")
 -- ============================================================================
 -- PART 6: SLIDER CONFIGURATIONS & INTERFACE SIZERS
 -- ============================================================================
-local UserInputService = game:GetService("UserInputService")
 local subPanel = shared.subPanel
 -- --- SLIDER 1: FOV SIZE SLIDER CONTAINER ---
 local sliderContainer = Instance.new("Frame")
@@ -507,7 +504,7 @@ end
 predContainer.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then predActive = true; updatePredSlider(i.Position) end end)
 UserInputService.InputChanged:Connect(function(i) if predActive and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then updatePredSlider(i.Position) end end)
 UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then predActive = false end end)
--- --- SLIDER 4: HITBOX SCALE CONFIG SLIDER CONTAINER ---
+-- --- SLIDER 4: HITBOX SCALE RECALIBRATED CONFIG SLIDER ---
 local hitboxContainer = Instance.new("Frame")
 hitboxContainer.Size = UDim2.new(0.92, 0, 0, 32); hitboxContainer.BackgroundColor3 = Color3.fromRGB(12, 12, 20); hitboxContainer.BackgroundTransparency = 0.15; hitboxContainer.Parent = subPanel
 local hbCorner = Instance.new("UICorner"); hbCorner.CornerRadius = UDim.new(0, 4); hbCorner.Parent = hitboxContainer
@@ -551,7 +548,7 @@ shared.fovCircle.Size = UDim2.new(0, shared.FOV_RADIUS * 2, 0, shared.FOV_RADIUS
 shared.fovCircle.AnchorPoint = Vector2.new(0.5, 0.5); shared.fovCircle.BackgroundTransparency = 1; shared.fovCircle.Visible = shared.fovEnabled; shared.fovCircle.Parent = screenGui
 local cCorner = Instance.new("UICorner"); cCorner.CornerRadius = UDim.new(1, 0); cCorner.Parent = shared.fovCircle
 shared.circleStroke = Instance.new("UIStroke")
-shared.circleStroke.Thickness = 1.5; shared.circleStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; shared.circleStroke.Transparency = 0.4; shared.circleStroke.Parent = shared.fovCircle
+shared.circleStroke.Thickness = 1.5; stroke8.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; shared.circleStroke.Transparency = 0.4; shared.circleStroke.Parent = shared.fovCircle
 local dragging, dragInput, dragStart, sPos
 shared.dragHandleButton.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then dragging = true; dragStart = i.Position; sPos = mainFrame.Position; i.Changed:Connect(function() if i.UserInputState == Enum.UserInputState.End then dragging = false end end) end end)
 UserInputService.InputChanged:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then dragInput = i end end)
@@ -560,7 +557,6 @@ print("[Part 7/8] Physics Drag Pipelines Coupled.")
 -- ============================================================================
 -- PART 8: OPERATIONAL INTERFACE PIPELINE & CORE CHROMA SYNC
 -- ============================================================================
-local camera = workspace.CurrentCamera
 local mainFrame = shared.mainFrame; local subPanel = shared.subPanel; local centerCrosshairContainer = shared.centerCrosshairContainer; local sliderFill = shared.sliderFill; local smoothFill = shared.smoothFill; local predFill = shared.predFill; local hitboxFill = shared.hitboxFill
 RunService.RenderStepped:Connect(function()
 local absoluteCenter = UDim2.new(0, camera.ViewportSize.X / 2, 0, camera.ViewportSize.Y / 2)
@@ -728,7 +724,7 @@ shared.hitboxToggleButton.Text = shared.hitboxExpanded and "EXPAND HITBOX: ON" o
 shared.hitboxToggleButton.TextColor3 = shared.hitboxExpanded and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(245, 245, 255)
 shared.refreshHitboxState()
 end)
--- Safe standalone isolation thread loop processing player filter updates smoothly
+-- Safe dynamic isolation task thread to update exclusion filter parameters smoothly
 task.spawn(function()
 while task.wait(0.5) do
 local localChar = localPlayer.Character
