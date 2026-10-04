@@ -154,10 +154,10 @@ function shared.applyHitboxExpansion(char, pObj)
 			}
 		end
 		
-		part.Size = Vector3.new(shared.hitboxSizeValue, shared.hitboxSizeValue, shared.hitboxSizeValue)
-		part.Transparency = 0.65
-		part.CanCollide = false
-		part.Massless = true
+		activePart.Size = Vector3.new(shared.hitboxSizeValue, shared.hitboxSizeValue, shared.hitboxSizeValue)
+		activePart.Transparency = 0.65
+		activePart.CanCollide = false
+		activePart.Massless = true
 	end
 end
 
@@ -610,7 +610,7 @@ local dragging, dragInput, dragStart, sPos
 shared.dragHandleButton.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then dragging = true; dragStart = i.Position; sPos = mainFrame.Position; i.Changed:Connect(function() if i.UserInputState == Enum.UserInputState.End then dragging = false end end) end end)
 UserInputService.InputChanged:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then dragInput = i end end)
 RunService.RenderStepped:Connect(function() if dragging and dragInput then local d = dragInput.Position - dragStart; mainFrame.Position = UDim2.new(sPos.X.Scale, sPos.X.Offset + d.X, sPos.Y.Scale, sPos.Y.Offset + d.Y) end end)
--- Anti-Cheat Multiplier Bypass Layer Logic
+-- Physics Sub-Simulation Layer (Forced Hitbox Matrix Sync & Stat Overrides)
 RunService.PreSimulation:Connect(function()
 local character = localPlayer.Character
 local humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -622,23 +622,36 @@ pcall(function()
 humanoid.JumpHeight = (shared.jumpPowerValue * shared.jumpPowerValue) / (2 * workspace.Gravity)
 end)
 end
+-- Strict Verification: Force active expanded hitbox calculations over memory checks
+if shared.hitboxExpanded then
+shared.refreshHitboxState()
+end
 end)
--- Main Context Rendering Tick Loop
+-- Main Chroma Sync Rendering Loop (Protected Reference Trappings)
 RunService.RenderStepped:Connect(function()
 local absoluteCenter = UDim2.new(0, camera.ViewportSize.X / 2, 0, camera.ViewportSize.Y / 2)
 shared.fovCircle.Size = UDim2.new(0, shared.FOV_RADIUS * 2, 0, shared.FOV_RADIUS * 2); shared.fovCircle.Position = absoluteCenter
 centerCrosshairContainer.Position = absoluteCenter; centerCrosshairContainer.Rotation = (tick() * shared.CROSSHAIR_SPIN_SPEED) % 360
 local dynamicColor = Color3.fromHSV((tick() * shared.RAINBOW_SPEED) % 1, 0.95, 1)
 shared.hudStroke.Color = dynamicColor; shared.subStroke.Color = dynamicColor; shared.circleStroke.Color = dynamicColor
-for _, textObj in ipairs(textSyncList) do if textObj.TextColor3 ~= Color3.fromRGB(255, 60, 60) and textObj.TextColor3 ~= Color3.fromRGB(255, 120, 120) then textObj.TextColor3 = dynamicColor end end
-shared.updateEspSectors(); shared.refreshHitboxState()
-for _, stroke in ipairs(shared.allStrokes) do stroke.Color = dynamicColor end
-for _, segment in ipairs(shared.crosshairLines) do segment.BackgroundColor3 = dynamicColor end
+-- Safe Validation: Skips color injection safely if label targets go out of bounds
+for _, textObj in ipairs(textSyncList) do
+pcall(function()
+if textObj and textObj.Parent and textObj.TextColor3 ~= Color3.fromRGB(255, 60, 60) and textObj.TextColor3 ~= Color3.fromRGB(255, 120, 120) then
+textObj.TextColor3 = dynamicColor
+end
+end)
+end
+shared.updateEspSectors()
+for _, stroke in ipairs(shared.allStrokes) do pcall(function() stroke.Color = dynamicColor end) end
+for _, segment in ipairs(shared.crosshairLines) do pcall(function() segment.BackgroundColor3 = dynamicColor end) end
 end)
 RunService.Stepped:Connect(function()
 if shared.hitboxExpanded then
 for part, _ in pairs(shared.originalHitboxData) do
-if part and part.Parent and part.Parent:FindFirstChildOfClass("Humanoid") and part.Parent:FindFirstChildOfClass("Humanoid").Health > 0 then part.CanCollide = false end
+if part and part.Parent and part.Parent:FindFirstChildOfClass("Humanoid") and part.Parent:FindFirstChildOfClass("Humanoid").Health > 0 then
+part.CanCollide = false
+end
 end
 end
 end)
@@ -664,31 +677,29 @@ if t then shared.target = t; shared.locked = true; shared.textButton.Text = "COR
 end
 end
 end)
--- LAYERED EXTENSION MANAGEMENT PIPELINE WITH SYNCED GLYPH TRAPPING
+-- LAYERED EXTENSION MANAGEMENT TWEEN PIPELINE
 local tweenInfo = TweenInfo.new(0.40, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out)
--- Action 1: Open panel, make [+] vanish, and make outer-left [-] button appear
 linkInputTouch(shared.extendButton, function()
 shared.menuExpanded = true
-extendBtn.Visible = false -- [+] Disappears instantly
+extendBtn.Visible = false
 extrasScrollPanel.Visible = true
 local openTween = TweenService:Create(extrasScrollPanel, tweenInfo, {Position = UDim2.new(0, -235, 0, 0)})
 openTween:Play()
 openTween.Completed:Connect(function()
 if shared.menuExpanded then
-closeExtrasWrap.Visible = true -- [-] shows up cleanly on the absolute outer-left edge
+closeExtrasWrap.Visible = true
 end
 end)
 end)
--- Action 2: Close panel using the outer left [-] button, hide it, and restore [+]
 linkInputTouch(closeExtrasBtn, function()
 shared.menuExpanded = false
-closeExtrasWrap.Visible = false -- Hide [-] button instantly so it doesn't float during close slide
+closeExtrasWrap.Visible = false
 local closeTween = TweenService:Create(extrasScrollPanel, tweenInfo, {Position = UDim2.new(0, 0, 0, 0)})
 closeTween:Play()
 closeTween.Completed:Connect(function()
 if not shared.menuExpanded then
 extrasScrollPanel.Visible = false
-extendBtn.Visible = true -- [+] safely reappears on main panel
+extendBtn.Visible = true
 end
 end)
 end)
@@ -733,4 +744,4 @@ linkInputTouch(shared.modifierButton, executeModifierToggle); modifierEmu.Event:
 local function executeModalityToggle() shared.lockModalityIndex = (shared.lockModalityIndex % #shared.lockModalityList) + 1; shared.lockModalityMode = shared.lockModalityList[shared.lockModalityIndex]; shared.modalityButton.Text = "SNAP DIR: " .. shared.lockModalityMode end
 linkInputTouch(shared.modalityButton, executeModalityToggle); modalityEmu.Event:Connect(executeModalityToggle)
 task.spawn(function() while task.wait(0.5) do if localPlayer.Character then shared.wallCheckParams.FilterDescendantsInstances = {localPlayer.Character, camera} end end end)
-print("[Master Core] Structural Keybind Matrix Complete.")
+print("[Master Core] Structural Runtime Fixes Finalized.")
