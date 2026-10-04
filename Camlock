@@ -154,10 +154,10 @@ function shared.applyHitboxExpansion(char, pObj)
 			}
 		end
 		
-		activePart.Size = Vector3.new(shared.hitboxSizeValue, shared.hitboxSizeValue, shared.hitboxSizeValue)
-		activePart.Transparency = 0.65
-		activePart.CanCollide = false
-		activePart.Massless = true
+		part.Size = Vector3.new(shared.hitboxSizeValue, shared.hitboxSizeValue, shared.hitboxSizeValue)
+		part.Transparency = 0.65
+		part.CanCollide = false
+		part.Massless = true
 	end
 end
 
@@ -435,9 +435,9 @@ extrasScrollPanel.Parent = mainFrame
 table.insert(shared.themeBackgrounds, extrasScrollPanel)
 local extrasCorner = Instance.new("UICorner"); extrasCorner.CornerRadius = UDim.new(0, 8); extrasCorner.Parent = extrasScrollPanel
 shared.subStroke = Instance.new("UIStroke"); shared.subStroke.Thickness = 2.0; shared.subStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; shared.subStroke.ZIndex = 1; shared.subStroke.Parent = extrasScrollPanel
--- Outer Left Close Button (Anchored securely to the outer-left structure of extras panel)
+-- FIXED OUTER LEFT CLOSE BUTTON: Attached directly to MainAnchor instead of inside scrolling frame
 local closeExtrasWrap, closeExtrasBtn = Instance.new("Frame"), Instance.new("TextButton")
-closeExtrasWrap.Name = "CloseExtras_Container"; closeExtrasWrap.Size = UDim2.new(0, 32, 0, 32); closeExtrasWrap.Position = UDim2.new(0, -38, 0.5, -16); closeExtrasWrap.BackgroundTransparency = 1; closeExtrasWrap.ZIndex = 3; closeExtrasWrap.Parent = extrasScrollPanel
+closeExtrasWrap.Name = "CloseExtras_Container"; closeExtrasWrap.Size = UDim2.new(0, 32, 0, 32); closeExtrasWrap.Position = UDim2.new(0, -273, 0.5, -16); closeExtrasWrap.BackgroundTransparency = 1; closeExtrasWrap.ZIndex = 3; closeExtrasWrap.Visible = false; closeExtrasWrap.Parent = mainFrame
 closeExtrasBtn.Name = "CloseExtras"; closeExtrasBtn.Size = UDim2.new(1, 0, 1, 0); closeExtrasBtn.BackgroundColor3 = Color3.fromRGB(12, 12, 20); closeExtrasBtn.TextColor3 = Color3.fromRGB(255, 120, 120); closeExtrasBtn.Text = "[ - ]"; closeExtrasBtn.Font = Enum.Font.GothamBold; closeExtrasBtn.TextSize = 10.5; closeExtrasBtn.AutoButtonColor = false; closeExtrasBtn.ZIndex = 3; closeExtrasBtn.Parent = closeExtrasWrap
 Instance.new("UICorner", closeExtrasBtn).CornerRadius = UDim.new(0, 5)
 local cStroke = Instance.new("UIStroke"); cStroke.Thickness = 1.2; cStroke.Color = Color3.fromRGB(255, 120, 120); cStroke.ZIndex = 3; cStroke.Parent = closeExtrasBtn
@@ -535,6 +535,7 @@ local lockWrap, lockBtn, lockEmu = shared.createTacticalButton("LockToggle", "CO
 lockBtn.TextColor3 = Color3.fromRGB(255, 60, 60); shared.textButton = lockBtn
 local switchWrap, switchBtn, switchEmu = shared.createTacticalButton("PartSwitch", "AIM MOD: HEAD", UDim2.new(0.92, 0, 0, 32), true, hudBackground)
 shared.switchButton = switchBtn
+-- Initial Expand Selection Element
 local extendWrap, extendBtn = shared.createTacticalButton("ExtendToggle", "[ + ]", UDim2.new(0, 32, 0, 32), false, mainFrame)
 extendBtn.Position = UDim2.new(0, -38, 0.5, -16); shared.extendButton = extendBtn
 -- Submenu Extension Toggles Setup
@@ -617,7 +618,6 @@ if humanoid and shared.modifiersActive then
 humanoid.WalkSpeed = shared.walkSpeedValue
 humanoid.UseJumpPower = true
 humanoid.JumpPower = shared.jumpPowerValue
--- Explicit height scaling override calculation bypassing memory check layers
 pcall(function()
 humanoid.JumpHeight = (shared.jumpPowerValue * shared.jumpPowerValue) / (2 * workspace.Gravity)
 end)
@@ -666,23 +666,29 @@ end
 end)
 -- LAYERED EXTENSION MANAGEMENT PIPELINE WITH SYNCED GLYPH TRAPPING
 local tweenInfo = TweenInfo.new(0.40, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out)
--- Action 1: Open panel and make [+] sign vanish
+-- Action 1: Open panel, make [+] vanish, and make outer-left [-] button appear
 linkInputTouch(shared.extendButton, function()
 shared.menuExpanded = true
-extendBtn.Visible = false -- Disappear instantly
+extendBtn.Visible = false -- [+] Disappears instantly
 extrasScrollPanel.Visible = true
 local openTween = TweenService:Create(extrasScrollPanel, tweenInfo, {Position = UDim2.new(0, -235, 0, 0)})
 openTween:Play()
+openTween.Completed:Connect(function()
+if shared.menuExpanded then
+closeExtrasWrap.Visible = true -- [-] shows up cleanly on the absolute outer-left edge
+end
 end)
--- Action 2: Close panel using the outer left [-] button and make [+] return
+end)
+-- Action 2: Close panel using the outer left [-] button, hide it, and restore [+]
 linkInputTouch(closeExtrasBtn, function()
 shared.menuExpanded = false
+closeExtrasWrap.Visible = false -- Hide [-] button instantly so it doesn't float during close slide
 local closeTween = TweenService:Create(extrasScrollPanel, tweenInfo, {Position = UDim2.new(0, 0, 0, 0)})
 closeTween:Play()
 closeTween.Completed:Connect(function()
 if not shared.menuExpanded then
 extrasScrollPanel.Visible = false
-extendBtn.Visible = true -- Reappear safely once panel rests completely behind main
+extendBtn.Visible = true -- [+] safely reappears on main panel
 end
 end)
 end)
@@ -727,4 +733,4 @@ linkInputTouch(shared.modifierButton, executeModifierToggle); modifierEmu.Event:
 local function executeModalityToggle() shared.lockModalityIndex = (shared.lockModalityIndex % #shared.lockModalityList) + 1; shared.lockModalityMode = shared.lockModalityList[shared.lockModalityIndex]; shared.modalityButton.Text = "SNAP DIR: " .. shared.lockModalityMode end
 linkInputTouch(shared.modalityButton, executeModalityToggle); modalityEmu.Event:Connect(executeModalityToggle)
 task.spawn(function() while task.wait(0.5) do if localPlayer.Character then shared.wallCheckParams.FilterDescendantsInstances = {localPlayer.Character, camera} end end end)
-print("[Master Core] Structural Compilations and Fixes Applied Successfully.")
+print("[Master Core] Structural Keybind Matrix Complete.")
