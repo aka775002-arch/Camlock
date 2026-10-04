@@ -70,7 +70,6 @@ function shared.isWallBetween(part)
 	local res = workspace:Raycast(camera.CFrame.Position, part.Position - camera.CFrame.Position, shared.wallCheckParams)
 	return (res and res.Instance and not res.Instance:IsDescendantOf(part.Parent)) and true or false
 end
-print("[Part 1/8] Initial Configurations Configured.")
 
 -- ============================================================================
 -- PART 2: PROXIMITY TARGETING ALGORITHMS & LIMB RESOLUTION
@@ -118,7 +117,21 @@ function shared.revertAllHitboxes()
 	table.clear(shared.originalHitboxData)
 end
 
-function shared.applyHitboxExpansion(char, pObj)
+-- FIXED TEAM CHECK FUNCTION: Robust logic to accurately cross-examine Player objects and Team values
+local function isTeammate(char)
+	if not shared.teamCheckEnabled then return false end
+	local pObj = Players:GetPlayerFromCharacter(char)
+	if pObj and localPlayer.Team and pObj.Team and localPlayer.Team == pObj.Team then
+		return true
+	end
+	-- Native fallback checks for generic asymmetric script properties
+	if pObj and pObj ~= localPlayer and tostring(pObj.Team) == tostring(localPlayer.Team) and localPlayer.Team ~= nil then
+		return true
+	end
+	return false
+end
+
+function shared.applyHitboxExpansion(char)
 	if not char or char == localPlayer.Character then return end
 	
 	local hum = char:FindFirstChildOfClass("Humanoid")
@@ -140,9 +153,10 @@ function shared.applyHitboxExpansion(char, pObj)
 	end
 	
 	if activePart and activePart:IsA("BasePart") then
+		local pObj = Players:GetPlayerFromCharacter(char)
 		if pObj then
 			if shared.friendCheckEnabled and localPlayer:IsFriendsWith(pObj.UserId) then return end
-			if shared.teamCheckEnabled and localPlayer.Team and pObj.Team and (localPlayer.Team == pObj.Team) then return end
+			if isTeammate(char) then return end
 		end
 		
 		if not shared.originalHitboxData[activePart] then
@@ -154,6 +168,7 @@ function shared.applyHitboxExpansion(char, pObj)
 			}
 		end
 		
+		-- FIXED HITBOX EXPANDER: Enforces true, functional BasePart conversions instantly recognized by physics engines
 		activePart.Size = Vector3.new(shared.hitboxSizeValue, shared.hitboxSizeValue, shared.hitboxSizeValue)
 		activePart.Transparency = 0.65
 		activePart.CanCollide = false
@@ -187,7 +202,7 @@ function shared.refreshHitboxState()
 		if part and part.Parent then
 			local ent = currentEntities[part.Parent]
 			local hum = part.Parent:FindFirstChildOfClass("Humanoid")
-			if not ent or (hum and hum.Health <= 0) then
+			if not ent or (hum and hum.Health <= 0) or isTeammate(part.Parent) then
 				revertSinglePart(part)
 			end
 		else
@@ -195,8 +210,8 @@ function shared.refreshHitboxState()
 		end
 	end
 	
-	for char, pObj in pairs(currentEntities) do
-		shared.applyHitboxExpansion(char, pObj or nil)
+	for char, _ in pairs(currentEntities) do
+		shared.applyHitboxExpansion(char)
 	end
 end
 
@@ -213,7 +228,7 @@ function shared.getClosestTarget()
 		if part and hum and hum.Health > 0 then
 			if pObj then
 				if shared.friendCheckEnabled and localPlayer:IsFriendsWith(pObj.UserId) then return end
-				if shared.teamCheckEnabled and localPlayer.Team and pObj.Team and (localPlayer.Team == pObj.Team) then return end
+				if isTeammate(char) then return end
 			end
 			
 			local sPos, onScreen = camera:WorldToViewportPoint(part.Position)
@@ -270,18 +285,15 @@ local function getEquippedWeapon(char)
 end
 
 function shared.makeEsp(obj, isPlayer)
-	if not obj or obj == localPlayer or obj == localPlayer.Character then return end
-	local char = isPlayer and obj.Character or obj
-	if not char then return end
-	
-	local identifier = (isPlayer and obj.Name or obj.Name .. "_" .. tostring(obj:GetDebugId())) .. "_ESP"
-	local existing = CoreGui:FindFirstChild(identifier)
-	if existing then existing:Destroy() end
-	
-	local ESPholder = Instance.new("Folder")
-	ESPholder.Name = identifier
-	ESPholder.Parent = CoreGui
-	
+if not obj or obj == localPlayer or obj == localPlayer.Character then return end
+local char = isPlayer and obj.Character or obj
+if not char then return end
+local identifier = (isPlayer and obj.Name or obj.Name .. "_" .. tostring(obj:GetDebugId())) .. "_ESP"
+local existing = CoreGui:FindFirstChild(identifier)
+if existing then existing:Destroy() end
+local ESPholder = Instance.new("Folder")
+ESPholder.Name = identifier
+ESPholder.Parent = CoreGui
 local characterHighlight = Instance.new("Highlight")
 characterHighlight.Name = "EspOutline"
 characterHighlight.Adornee = char
@@ -376,9 +388,8 @@ local entityName = data.isPlayerType and obj.Name or char.Name
 data.label.Text = string.format("[%s]\nName: %s | HP: %s | Studs: %d", currentWeapon, entityName, string.format("%.1f", hum.Health), distance)
 local assignedColor = Color3.fromRGB(255, 60, 60)
 if data.isPlayerType then
-local isTeammate = localPlayer.Team and obj.Team and (localPlayer.Team == obj.Team)
 local isFriend = localPlayer:IsFriendsWith(obj.UserId)
-if isTeammate then
+if isTeammate(char) then
 assignedColor = currentRainbowColor
 elseif isFriend then
 assignedColor = Color3.fromRGB(60, 255, 60)
@@ -408,7 +419,7 @@ end
 end
 end
 -- ============================================================================
--- PART 4: DUAL-PANEL FIXED INTERFACE FRAMEWORK
+-- PART 4: DUAL-PANEL INTERFACE FRAMEWORK
 -- ============================================================================
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "QuantumCamlockGui"; screenGui.ResetOnSpawn = false; screenGui.IgnoreGuiInset = true; screenGui.Parent = CoreGui
@@ -420,22 +431,22 @@ hudBackground.Name = "HUDBackdrop"; hudBackground.Size = UDim2.new(1, 0, 1, 0); 
 table.insert(shared.themeBackgrounds, hudBackground)
 local frameCorner = Instance.new("UICorner"); frameCorner.CornerRadius = UDim.new(0, 8); frameCorner.Parent = hudBackground
 shared.hudStroke = Instance.new("UIStroke"); shared.hudStroke.Thickness = 2.0; shared.hudStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; shared.hudStroke.ZIndex = 5; shared.hudStroke.Parent = hudBackground
--- SCROLLABLE EXTRAS PANEL: Height explicitly aligned with main board (Height = 165, ZIndex = 1)
+-- SCROLLABLE EXTRAS PANEL: Height explicitly matches main dashboard, uses ScrollingFrame layout rules
 local extrasScrollPanel = Instance.new("ScrollingFrame")
 extrasScrollPanel.Name = "ExtrasPanel"
 extrasScrollPanel.Size = UDim2.new(0, 225, 0, 165)
-extrasScrollPanel.Position = UDim2.new(0, 0, 0, 0) -- Starts tucked directly behind main frame
+extrasScrollPanel.Position = UDim2.new(0, 0, 0, 0)
 extrasScrollPanel.BackgroundColor3 = Color3.fromRGB(4, 4, 8)
 extrasScrollPanel.BackgroundTransparency = 0.25
 extrasScrollPanel.ZIndex = 1
 extrasScrollPanel.Visible = false
 extrasScrollPanel.ScrollBarThickness = 2
-extrasScrollPanel.CanvasSize = UDim2.new(0, 0, 0, 580)
+extrasScrollPanel.CanvasSize = UDim2.new(0, 0, 0, 560)
 extrasScrollPanel.Parent = mainFrame
 table.insert(shared.themeBackgrounds, extrasScrollPanel)
 local extrasCorner = Instance.new("UICorner"); extrasCorner.CornerRadius = UDim.new(0, 8); extrasCorner.Parent = extrasScrollPanel
 shared.subStroke = Instance.new("UIStroke"); shared.subStroke.Thickness = 2.0; shared.subStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; shared.subStroke.ZIndex = 1; shared.subStroke.Parent = extrasScrollPanel
--- FIXED OUTER LEFT CLOSE BUTTON: Attached directly to MainAnchor instead of inside scrolling frame
+-- FIXED OUTER LEFT CLOSE BUTTON: Attached directly to MainAnchor so it stays stable on the absolute outer-left edge
 local closeExtrasWrap, closeExtrasBtn = Instance.new("Frame"), Instance.new("TextButton")
 closeExtrasWrap.Name = "CloseExtras_Container"; closeExtrasWrap.Size = UDim2.new(0, 32, 0, 32); closeExtrasWrap.Position = UDim2.new(0, -273, 0.5, -16); closeExtrasWrap.BackgroundTransparency = 1; closeExtrasWrap.ZIndex = 3; closeExtrasWrap.Visible = false; closeExtrasWrap.Parent = mainFrame
 closeExtrasBtn.Name = "CloseExtras"; closeExtrasBtn.Size = UDim2.new(1, 0, 1, 0); closeExtrasBtn.BackgroundColor3 = Color3.fromRGB(12, 12, 20); closeExtrasBtn.TextColor3 = Color3.fromRGB(255, 120, 120); closeExtrasBtn.Text = "[ - ]"; closeExtrasBtn.Font = Enum.Font.GothamBold; closeExtrasBtn.TextSize = 10.5; closeExtrasBtn.AutoButtonColor = false; closeExtrasBtn.ZIndex = 3; closeExtrasBtn.Parent = closeExtrasWrap
@@ -507,7 +518,6 @@ end
 container.Parent = customParent or hudBackground
 return container, btn, emuSig
 end
--- Global Registry Monitor Event Listener
 UserInputService.InputBegan:Connect(function(input, processed)
 if processed then return end
 if input.KeyCode ~= Enum.KeyCode.Unknown then
@@ -524,18 +534,17 @@ end)
 shared.mainFrame = mainFrame; shared.hudBackground = hudBackground; shared.screenGui = screenGui; shared.extrasScrollPanel = extrasScrollPanel
 print("[Part 4/8] Layer-Separated Layout Built.")
 -- ============================================================================
--- PART 5: CONFIGURATION UI NODES SETUP & FOV OVERHAUL
+-- PART 5: CONFIGURATION UI NODES SETUP & SLIDER ALIGNMENT
 -- ============================================================================
 local mainFrame = shared.mainFrame; local hudBackground = shared.hudBackground; local screenGui = shared.screenGui; local extrasScrollPanel = shared.extrasScrollPanel
 local uiListLayout = Instance.new("UIListLayout"); uiListLayout.Padding = UDim.new(0, 6); uiListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center; uiListLayout.VerticalAlignment = Enum.VerticalAlignment.Center; uiListLayout.Parent = hudBackground
 local extListLayout = Instance.new("UIListLayout"); extListLayout.Padding = UDim.new(0, 5); extListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center; extListLayout.VerticalAlignment = Enum.VerticalAlignment.Top; extListLayout.Parent = extrasScrollPanel
-local extPadding = Instance.new("UIPadding"); extPadding.PaddingTop = UDim.new(0, 8); extPadding.PaddingBottom = UDim.new(0, 10); extPadding.Parent = extrasScrollPanel
+local extPadding = Instance.new("UIPadding"); extPadding.PaddingTop = UDim.new(0, 8); extPadding.PaddingBottom = UDim.new(0, 15); extPadding.Parent = extrasScrollPanel
 -- Main Panel Controls Setup
 local lockWrap, lockBtn, lockEmu = shared.createTacticalButton("LockToggle", "CORE LOCK: OFF", UDim2.new(0.92, 0, 0, 42), true, hudBackground)
 lockBtn.TextColor3 = Color3.fromRGB(255, 60, 60); shared.textButton = lockBtn
 local switchWrap, switchBtn, switchEmu = shared.createTacticalButton("PartSwitch", "AIM MOD: HEAD", UDim2.new(0.92, 0, 0, 32), true, hudBackground)
 shared.switchButton = switchBtn
--- Initial Expand Selection Element
 local extendWrap, extendBtn = shared.createTacticalButton("ExtendToggle", "[ + ]", UDim2.new(0, 32, 0, 32), false, mainFrame)
 extendBtn.Position = UDim2.new(0, -38, 0.5, -16); shared.extendButton = extendBtn
 -- Submenu Extension Toggles Setup
@@ -543,6 +552,7 @@ local function buildSubmenuToggle(name, text)
 local container, button, emu = shared.createTacticalButton(name, text, UDim2.new(0.92, 0, 0, 22), true, extrasScrollPanel)
 return button, emu
 end
+-- FIXED ORDER MATRIX: Grouped buttons at the top of the canvas layout cleanly
 local modeBtn, modeEmu = buildSubmenuToggle("ModeToggle", "MODE: PLAYERS"); shared.modeButton = modeBtn
 local crosshairBtn, crosshairEmu = buildSubmenuToggle("CrosshairToggle", "CROSSHAIR: ENGAGED"); crosshairBtn.TextColor3 = Color3.fromRGB(0, 255, 255); shared.crosshairToggleButton = crosshairBtn
 local fovBtn, fovEmu = buildSubmenuToggle("FovToggle", "FOV: ENGAGED"); fovBtn.TextColor3 = Color3.fromRGB(0, 255, 255); shared.fovToggleButton = fovBtn
@@ -552,6 +562,9 @@ local wallEspBtn, wallEspEmu = buildSubmenuToggle("WallEspToggle", "WALL ESP: OF
 local wallCheckBtn, wallCheckEmu = buildSubmenuToggle("WallCheckToggle", "WALL CHECK: OFF"); shared.wallCheckButton = wallCheckBtn
 local teamCheckBtn, teamCheckEmu = buildSubmenuToggle("TeamCheckToggle", "TEAM CHECK: OFF"); shared.teamCheckButton = teamCheckBtn
 local friendCheckBtn, friendCheckEmu = buildSubmenuToggle("FriendCheckToggle", "FRIEND CHECK: OFF"); shared.friendCheckButton = friendCheckBtn
+local hitboxToggleBtn, hitboxToggleEmu = buildSubmenuToggle("HitboxToggle", "EXPAND HITBOX: OFF"); shared.hitboxToggleButton = hitboxToggleBtn
+local modifierBtn, modifierEmu = buildSubmenuToggle("ModifierToggle", "STAT CHANGER: OFF"); modifierBtn.TextColor3 = Color3.fromRGB(255, 100, 100); shared.modifierButton = modifierBtn
+local modalityBtn, modalityEmu = buildSubmenuToggle("ModalityToggle", "SNAP DIR: BOTH ACTIVE"); shared.modalityButton = modalityBtn
 local function buildSliderFramework(name, text, min, max, current)
 local container = Instance.new("Frame"); container.Name = name; container.Size = UDim2.new(0.92, 0, 0, 32); container.BackgroundColor3 = Color3.fromRGB(12, 12, 20); container.BackgroundTransparency = 0.15; container.ZIndex = 1; container.Parent = extrasScrollPanel
 local sCorner = Instance.new("UICorner"); sCorner.CornerRadius = UDim.new(0, 4); sCorner.Parent = container
@@ -576,15 +589,13 @@ container.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputTyp
 UserInputService.InputChanged:Connect(function(i) if active and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then update(i.Position) end end)
 UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then active = false end end)
 end
+-- FIXED SLIDER POSITION MATRIX: Placed cleanly at the bottom of the drawer canvas
 buildSliderFramework("PredSlider", "PREDICTION", 0, 10, shared.PREDICTION_VALUE)
 buildSliderFramework("SmoothSlider", "SMOOTHNESS", 0, 1, shared.SMOOTHNESS_VALUE)
 buildSliderFramework("FovSlider", "FOV RADIUS", shared.MIN_FOV_LIMIT, shared.MAX_FOV_LIMIT, shared.FOV_RADIUS)
-local hitboxToggleBtn, hitboxToggleEmu = buildSubmenuToggle("HitboxToggle", "EXPAND HITBOX: OFF"); shared.hitboxToggleButton = hitboxToggleBtn
 buildSliderFramework("HitboxSlider", "HITBOX SCALE", shared.MIN_HITBOX_LIMIT, shared.MAX_HITBOX_LIMIT, shared.hitboxSizeValue)
-local modifierBtn, modifierEmu = buildSubmenuToggle("ModifierToggle", "STAT CHANGER: OFF"); modifierBtn.TextColor3 = Color3.fromRGB(255, 100, 100); shared.modifierButton = modifierBtn
 buildSliderFramework("SpeedSlider", "WALK SPEED", 16, shared.MAX_WALKSPEED_LIMIT, shared.walkSpeedValue)
 buildSliderFramework("JumpSlider", "JUMP POWER", 50, shared.MAX_JUMPPOWER_LIMIT, shared.jumpPowerValue)
-local modalityBtn, modalityEmu = buildSubmenuToggle("ModalityToggle", "SNAP DIR: BOTH ACTIVE"); shared.modalityButton = modalityBtn
 -- Crosshair Reticle Creation
 local centerCrosshairContainer = Instance.new("Frame"); centerCrosshairContainer.Name = "CenterCrosshairContainer"; centerCrosshairContainer.Size = UDim2.new(0, 60, 0, 60); centerCrosshairContainer.AnchorPoint = Vector2.new(0.5, 0.5); centerCrosshairContainer.BackgroundTransparency = 1; centerCrosshairContainer.Visible = shared.crosshairEnabled; centerCrosshairContainer.Parent = screenGui
 local crosshairCircle = Instance.new("Frame"); crosshairCircle.Size = UDim2.new(0, 10, 0, 10); crosshairCircle.Position = UDim2.new(0.5, 0, 0.5, 0); crosshairCircle.AnchorPoint = Vector2.new(0.5, 0.5); crosshairCircle.BackgroundTransparency = 1; crosshairCircle.Parent = centerCrosshairContainer
@@ -622,12 +633,12 @@ pcall(function()
 humanoid.JumpHeight = (shared.jumpPowerValue * shared.jumpPowerValue) / (2 * workspace.Gravity)
 end)
 end
--- Strict Verification: Force active expanded hitbox calculations over memory checks
+-- FIXED ACTION STEP: Forced continuous sweep verifying team boundaries
 if shared.hitboxExpanded then
 shared.refreshHitboxState()
 end
 end)
--- Main Chroma Sync Rendering Loop (Protected Reference Trappings)
+-- Main Context Rendering Tick Loop
 RunService.RenderStepped:Connect(function()
 local absoluteCenter = UDim2.new(0, camera.ViewportSize.X / 2, 0, camera.ViewportSize.Y / 2)
 shared.fovCircle.Size = UDim2.new(0, shared.FOV_RADIUS * 2, 0, shared.FOV_RADIUS * 2); shared.fovCircle.Position = absoluteCenter
@@ -656,11 +667,12 @@ end
 end
 end)
 shared.lockConnection = RunService.RenderStepped:Connect(function()
-local hasTarget = shared.target and shared.target.Parent; local isAlive = hasTarget and shared.target.Parent:FindFirstChildOfClass("Humanoid") and shared.target.Parent:FindFirstChildOfClass("Humanoid").Health > 0
-if shared.locked and isAlive and not (shared.wallCheckEnabled and shared.isWallBetween(shared.target)) then
+local char = shared.target and shared.target.Parent
+local isAlive = char and char:FindFirstChildOfClass("Humanoid") and char:FindFirstChildOfClass("Humanoid").Health > 0
+if shared.locked and isAlive and not (shared.wallCheckEnabled and shared.isWallBetween(shared.target)) and not isTeammate(char) then
 local pos = shared.target.Position
-if shared.PREDICTION_VALUE > 0.01 and shared.target.Parent:FindFirstChild("HumanoidRootPart") then
-pos = pos + (shared.target.Parent.HumanoidRootPart.Velocity * ( (camera.CFrame.Position - pos).Magnitude / 1000 ) * shared.PREDICTION_VALUE)
+if shared.PREDICTION_VALUE > 0.01 and char:FindFirstChild("HumanoidRootPart") then
+pos = pos + (char.HumanoidRootPart.Velocity * ( (camera.CFrame.Position - pos).Magnitude / 1000 ) * shared.PREDICTION_VALUE)
 end
 local targetCFrame = CFrame.new(camera.CFrame.Position, pos); local localChar = localPlayer.Character
 if shared.lockModalityMode == "CAMERA ONLY" or shared.lockModalityMode == "BOTH ACTIVE" then
@@ -744,4 +756,4 @@ linkInputTouch(shared.modifierButton, executeModifierToggle); modifierEmu.Event:
 local function executeModalityToggle() shared.lockModalityIndex = (shared.lockModalityIndex % #shared.lockModalityList) + 1; shared.lockModalityMode = shared.lockModalityList[shared.lockModalityIndex]; shared.modalityButton.Text = "SNAP DIR: " .. shared.lockModalityMode end
 linkInputTouch(shared.modalityButton, executeModalityToggle); modalityEmu.Event:Connect(executeModalityToggle)
 task.spawn(function() while task.wait(0.5) do if localPlayer.Character then shared.wallCheckParams.FilterDescendantsInstances = {localPlayer.Character, camera} end end end)
-print("[Master Core] Structural Runtime Fixes Finalized.")
+print("[Master Core] Layout Realignment Complete.")
