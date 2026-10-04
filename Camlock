@@ -408,7 +408,7 @@ end
 end
 end
 -- ============================================================================
--- PART 4: MAIN DUAL-PANEL WIDE UI FRAMEWORK (LAYERED LOGIC DEPTHS)
+-- PART 4: DUAL-PANEL FIXED INTERFACE FRAMEWORK
 -- ============================================================================
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "QuantumCamlockGui"; screenGui.ResetOnSpawn = false; screenGui.IgnoreGuiInset = true; screenGui.Parent = CoreGui
@@ -420,11 +420,11 @@ hudBackground.Name = "HUDBackdrop"; hudBackground.Size = UDim2.new(1, 0, 1, 0); 
 table.insert(shared.themeBackgrounds, hudBackground)
 local frameCorner = Instance.new("UICorner"); frameCorner.CornerRadius = UDim.new(0, 8); frameCorner.Parent = hudBackground
 shared.hudStroke = Instance.new("UIStroke"); shared.hudStroke.Thickness = 2.0; shared.hudStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; shared.hudStroke.ZIndex = 5; shared.hudStroke.Parent = hudBackground
--- SCROLLABLE EXTRAS PANEL: Height locked to match main console (Height = 165, ZIndex = 1)
+-- SCROLLABLE EXTRAS PANEL: Height explicitly aligned with main board (Height = 165, ZIndex = 1)
 local extrasScrollPanel = Instance.new("ScrollingFrame")
-extrasScrollPanel.Name = "ExtrasPanel")
+extrasScrollPanel.Name = "ExtrasPanel"
 extrasScrollPanel.Size = UDim2.new(0, 225, 0, 165)
-extrasScrollPanel.Position = UDim2.new(0, 0, 0, 0) -- COLLAPSED BASE STATE (Tucked cleanly behind)
+extrasScrollPanel.Position = UDim2.new(0, 0, 0, 0) -- Starts tucked directly behind main frame
 extrasScrollPanel.BackgroundColor3 = Color3.fromRGB(4, 4, 8)
 extrasScrollPanel.BackgroundTransparency = 0.25
 extrasScrollPanel.ZIndex = 1
@@ -435,7 +435,7 @@ extrasScrollPanel.Parent = mainFrame
 table.insert(shared.themeBackgrounds, extrasScrollPanel)
 local extrasCorner = Instance.new("UICorner"); extrasCorner.CornerRadius = UDim.new(0, 8); extrasCorner.Parent = extrasScrollPanel
 shared.subStroke = Instance.new("UIStroke"); shared.subStroke.Thickness = 2.0; shared.subStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; shared.subStroke.ZIndex = 1; shared.subStroke.Parent = extrasScrollPanel
--- Outer Left Close Button Setup (Anchored relative to extras box frame layout)
+-- Outer Left Close Button (Anchored securely to the outer-left structure of extras panel)
 local closeExtrasWrap, closeExtrasBtn = Instance.new("Frame"), Instance.new("TextButton")
 closeExtrasWrap.Name = "CloseExtras_Container"; closeExtrasWrap.Size = UDim2.new(0, 32, 0, 32); closeExtrasWrap.Position = UDim2.new(0, -38, 0.5, -16); closeExtrasWrap.BackgroundTransparency = 1; closeExtrasWrap.ZIndex = 3; closeExtrasWrap.Parent = extrasScrollPanel
 closeExtrasBtn.Name = "CloseExtras"; closeExtrasBtn.Size = UDim2.new(1, 0, 1, 0); closeExtrasBtn.BackgroundColor3 = Color3.fromRGB(12, 12, 20); closeExtrasBtn.TextColor3 = Color3.fromRGB(255, 120, 120); closeExtrasBtn.Text = "[ - ]"; closeExtrasBtn.Font = Enum.Font.GothamBold; closeExtrasBtn.TextSize = 10.5; closeExtrasBtn.AutoButtonColor = false; closeExtrasBtn.ZIndex = 3; closeExtrasBtn.Parent = closeExtrasWrap
@@ -507,7 +507,7 @@ end
 container.Parent = customParent or hudBackground
 return container, btn, emuSig
 end
--- Global Registry Keybind Event Handlers
+-- Global Registry Monitor Event Listener
 UserInputService.InputBegan:Connect(function(input, processed)
 if processed then return end
 if input.KeyCode ~= Enum.KeyCode.Unknown then
@@ -530,15 +530,14 @@ local mainFrame = shared.mainFrame; local hudBackground = shared.hudBackground; 
 local uiListLayout = Instance.new("UIListLayout"); uiListLayout.Padding = UDim.new(0, 6); uiListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center; uiListLayout.VerticalAlignment = Enum.VerticalAlignment.Center; uiListLayout.Parent = hudBackground
 local extListLayout = Instance.new("UIListLayout"); extListLayout.Padding = UDim.new(0, 5); extListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center; extListLayout.VerticalAlignment = Enum.VerticalAlignment.Top; extListLayout.Parent = extrasScrollPanel
 local extPadding = Instance.new("UIPadding"); extPadding.PaddingTop = UDim.new(0, 8); extPadding.PaddingBottom = UDim.new(0, 10); extPadding.Parent = extrasScrollPanel
--- Main Console Layout Allocations
+-- Main Panel Controls Setup
 local lockWrap, lockBtn, lockEmu = shared.createTacticalButton("LockToggle", "CORE LOCK: OFF", UDim2.new(0.92, 0, 0, 42), true, hudBackground)
 lockBtn.TextColor3 = Color3.fromRGB(255, 60, 60); shared.textButton = lockBtn
 local switchWrap, switchBtn, switchEmu = shared.createTacticalButton("PartSwitch", "AIM MOD: HEAD", UDim2.new(0.92, 0, 0, 32), true, hudBackground)
 shared.switchButton = switchBtn
--- Initial Expand Selection Element
 local extendWrap, extendBtn = shared.createTacticalButton("ExtendToggle", "[ + ]", UDim2.new(0, 32, 0, 32), false, mainFrame)
 extendBtn.Position = UDim2.new(0, -38, 0.5, -16); shared.extendButton = extendBtn
--- Submenu Scroll Canvas Generation List
+-- Submenu Extension Toggles Setup
 local function buildSubmenuToggle(name, text)
 local container, button, emu = shared.createTacticalButton(name, text, UDim2.new(0.92, 0, 0, 22), true, extrasScrollPanel)
 return button, emu
@@ -585,7 +584,7 @@ local modifierBtn, modifierEmu = buildSubmenuToggle("ModifierToggle", "STAT CHAN
 buildSliderFramework("SpeedSlider", "WALK SPEED", 16, shared.MAX_WALKSPEED_LIMIT, shared.walkSpeedValue)
 buildSliderFramework("JumpSlider", "JUMP POWER", 50, shared.MAX_JUMPPOWER_LIMIT, shared.jumpPowerValue)
 local modalityBtn, modalityEmu = buildSubmenuToggle("ModalityToggle", "SNAP DIR: BOTH ACTIVE"); shared.modalityButton = modalityBtn
--- Crosshair Reticle Layout Framework
+-- Crosshair Reticle Creation
 local centerCrosshairContainer = Instance.new("Frame"); centerCrosshairContainer.Name = "CenterCrosshairContainer"; centerCrosshairContainer.Size = UDim2.new(0, 60, 0, 60); centerCrosshairContainer.AnchorPoint = Vector2.new(0.5, 0.5); centerCrosshairContainer.BackgroundTransparency = 1; centerCrosshairContainer.Visible = shared.crosshairEnabled; centerCrosshairContainer.Parent = screenGui
 local crosshairCircle = Instance.new("Frame"); crosshairCircle.Size = UDim2.new(0, 10, 0, 10); crosshairCircle.Position = UDim2.new(0.5, 0, 0.5, 0); crosshairCircle.AnchorPoint = Vector2.new(0.5, 0.5); crosshairCircle.BackgroundTransparency = 1; crosshairCircle.Parent = centerCrosshairContainer
 Instance.new("UICorner", crosshairCircle).CornerRadius = UDim.new(1, 0)
@@ -610,16 +609,25 @@ local dragging, dragInput, dragStart, sPos
 shared.dragHandleButton.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then dragging = true; dragStart = i.Position; sPos = mainFrame.Position; i.Changed:Connect(function() if i.UserInputState == Enum.UserInputState.End then dragging = false end end) end end)
 UserInputService.InputChanged:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then dragInput = i end end)
 RunService.RenderStepped:Connect(function() if dragging and dragInput then local d = dragInput.Position - dragStart; mainFrame.Position = UDim2.new(sPos.X.Scale, sPos.X.Offset + d.X, sPos.Y.Scale, sPos.Y.Offset + d.Y) end end)
--- Operational Dynamic RunService Processing Engine Threads
+-- Anti-Cheat Multiplier Bypass Layer Logic
+RunService.PreSimulation:Connect(function()
+local character = localPlayer.Character
+local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+if humanoid and shared.modifiersActive then
+humanoid.WalkSpeed = shared.walkSpeedValue
+humanoid.UseJumpPower = true
+humanoid.JumpPower = shared.jumpPowerValue
+-- Explicit height scaling override calculation bypassing memory check layers
+pcall(function()
+humanoid.JumpHeight = (shared.jumpPowerValue * shared.jumpPowerValue) / (2 * workspace.Gravity)
+end)
+end
+end)
+-- Main Context Rendering Tick Loop
 RunService.RenderStepped:Connect(function()
 local absoluteCenter = UDim2.new(0, camera.ViewportSize.X / 2, 0, camera.ViewportSize.Y / 2)
 shared.fovCircle.Size = UDim2.new(0, shared.FOV_RADIUS * 2, 0, shared.FOV_RADIUS * 2); shared.fovCircle.Position = absoluteCenter
 centerCrosshairContainer.Position = absoluteCenter; centerCrosshairContainer.Rotation = (tick() * shared.CROSSHAIR_SPIN_SPEED) % 360
-local char = localPlayer.Character; local hum = char and char:FindFirstChildOfClass("Humanoid")
-if hum and shared.modifiersActive then
-hum.WalkSpeed = shared.walkSpeedValue; hum.UseJumpPower = true; hum.JumpPower = shared.jumpPowerValue
-pcall(function() hum.JumpHeight = (shared.jumpPowerValue * shared.jumpPowerValue) / (2 * workspace.Gravity) end)
-end
 local dynamicColor = Color3.fromHSV((tick() * shared.RAINBOW_SPEED) % 1, 0.95, 1)
 shared.hudStroke.Color = dynamicColor; shared.subStroke.Color = dynamicColor; shared.circleStroke.Color = dynamicColor
 for _, textObj in ipairs(textSyncList) do if textObj.TextColor3 ~= Color3.fromRGB(255, 60, 60) and textObj.TextColor3 ~= Color3.fromRGB(255, 120, 120) then textObj.TextColor3 = dynamicColor end end
@@ -710,10 +718,13 @@ local function executeHitboxToggle() shared.hitboxExpanded = not shared.hitboxEx
 linkInputTouch(shared.hitboxToggleButton, executeHitboxToggle); hitboxToggleEmu.Event:Connect(executeHitboxToggle)
 local function executeModifierToggle()
 shared.modifiersActive = not shared.modifiersActive; shared.modifierButton.Text = shared.modifiersActive and "STAT CHANGER: ACTIVE" or "STAT CHANGER: OFF"; shared.modifierButton.TextColor3 = shared.modifiersActive and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(255, 100, 100)
-if not shared.modifiersActive then local hum = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid") if hum then hum.WalkSpeed = 16; hum.JumpPower = 50; pcall(function() hum.JumpHeight = 7.2 end) end end
+if not shared.modifiersActive then
+local hum = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid")
+if hum then hum.WalkSpeed = 16; hum.JumpPower = 50; pcall(function() hum.JumpHeight = 7.2 end) end
+end
 end
 linkInputTouch(shared.modifierButton, executeModifierToggle); modifierEmu.Event:Connect(executeModifierToggle)
 local function executeModalityToggle() shared.lockModalityIndex = (shared.lockModalityIndex % #shared.lockModalityList) + 1; shared.lockModalityMode = shared.lockModalityList[shared.lockModalityIndex]; shared.modalityButton.Text = "SNAP DIR: " .. shared.lockModalityMode end
 linkInputTouch(shared.modalityButton, executeModalityToggle); modalityEmu.Event:Connect(executeModalityToggle)
 task.spawn(function() while task.wait(0.5) do if localPlayer.Character then shared.wallCheckParams.FilterDescendantsInstances = {localPlayer.Character, camera} end end end)
-print("[Master Core] Layer-Tween Panel Alignment Configuration Stable.")
+print("[Master Core] Structural Compilations and Fixes Applied Successfully.")
