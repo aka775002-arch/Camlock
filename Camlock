@@ -222,7 +222,7 @@ function shared.refreshHitboxState()
 	end
 end
 
-function shared.getClosestTarget()
+function shared.getClosestTarget(ignoreFov)
 	local localChar = localPlayer.Character
 	if not localChar or not localChar:FindFirstChild("HumanoidRootPart") then return nil end
 	local closestTarget, shortestDistance = nil, math.huge
@@ -239,14 +239,17 @@ function shared.getClosestTarget()
 			end
 			
 			local sPos, onScreen = camera:WorldToViewportPoint(part.Position)
-			if onScreen and (Vector2.new(sPos.X, sPos.Y) - centerScreen).Magnitude < shared.FOV_RADIUS then
-				local dist = (part.Position - localChar.HumanoidRootPart.Position).Magnitude
-				if dist < shortestDistance then 
-					if shared.wallCheckEnabled and shared.isWallBetween(part) then 
-						return 
+			if onScreen then
+				local fovCheck = (Vector2.new(sPos.X, sPos.Y) - centerScreen).Magnitude < shared.FOV_RADIUS
+				if ignoreFov or fovCheck then
+					local dist = (part.Position - localChar.HumanoidRootPart.Position).Magnitude
+					if dist < shortestDistance then 
+						if shared.wallCheckEnabled and shared.isWallBetween(part) then 
+							return 
+						end
+						shortestDistance = dist
+						closestTarget = part 
 					end
-					shortestDistance = dist
-					closestTarget = part 
 				end
 			end
 		end
@@ -278,7 +281,7 @@ function shared.clearTargetEsp()
 end
 
 local function getEquippedWeapon(char)
-	if char then
+if char then
 local tool = char:FindFirstChildOfClass("Tool")
 if tool then
 return tostring(tool.Name):upper()
@@ -354,11 +357,11 @@ else if folder then folder:Destroy() end; shared.activeEspStorage[obj] = nil end
 end
 end
 -- ============================================================================
--- PART 5: MASTERS FRAME ARRAYS (SHORTENED MAIN HUD / PERSISTENT EXTRAS)
+-- PART 5: DUAL-PANEL MASTER FRAMES
 -- ============================================================================
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainAnchor"
-mainFrame.Size = UDim2.new(0, 225, 0, 110) -- Shortened to match original layout size constraints
+mainFrame.Size = UDim2.new(0, 225, 0, 110)
 mainFrame.Position = UDim2.new(0.85, -112, 0.45, -55)
 mainFrame.BackgroundTransparency = 1
 mainFrame.ZIndex = 5
@@ -368,7 +371,6 @@ hudBackground.Name = "HUDBackdrop"; hudBackground.Size = UDim2.new(1, 0, 1, 0); 
 table.insert(shared.themeBackgrounds, hudBackground)
 local frameCorner = Instance.new("UICorner"); frameCorner.CornerRadius = UDim.new(0, 8); frameCorner.Parent = hudBackground
 shared.hudStroke = Instance.new("UIStroke"); shared.hudStroke.Thickness = 2.0; shared.hudStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; shared.hudStroke.ZIndex = 5; shared.hudStroke.Parent = hudBackground
--- EXTRAS PANEL CONTAINER (Persistent 290px wide canvas framework)
 local extrasScrollPanel = Instance.new("ScrollingFrame")
 extrasScrollPanel.Name = "ExtrasPanel"
 extrasScrollPanel.Size = UDim2.new(0, 290, 0, 340)
@@ -391,11 +393,9 @@ local cStroke = Instance.new("UIStroke"); cStroke.Thickness = 1.2; cStroke.Color
 local function linkInputTouch(btn, cb)
 btn.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then cb() end end)
 end
--- THINNER ROW CALCULATOR INTERCEPT: Reduces option toggle height parameter size safely
 function shared.createAbsolutePositionedButton(name, text, yOffset, isBindable, customParent, globalStateVar, baseLabelString)
 local container = Instance.new("Frame")
 container.Name = name .. "_Container"
--- Thinned Buttons Row Thickness (Changed from 22 to 17)
 local rowThicknessPixel = (customParent == extrasScrollPanel) and 17 or 22
 container.Size = UDim2.new((customParent == extrasScrollPanel) and 0.92 or 0.91, 0, 0, rowThicknessPixel)
 container.Position = UDim2.new(0.04, 0, 0, yOffset)
@@ -424,19 +424,8 @@ end
 container.Parent = customParent or hudBackground
 return container, btn, emuSig
 end
-UserInputService.InputBegan:Connect(function(input, processed)
-if processed then return end
-if input.KeyCode ~= Enum.KeyCode.Unknown then
-for actionName, boundKeyCode in pairs(customKeybindRegistry) do
-if input.KeyCode == boundKeyCode then
-local targetBtn = mainFrame:FindFirstChild(actionName, true) or extrasScrollPanel:FindFirstChild(actionName, true)
-if targetBtn and targetBtn:FindFirstChild("TextButtonEventEmulationSignal") then targetBtn.TextButtonEventEmulationSignal:Fire() end
-end
-end
-end
-end)
 -- ============================================================================
--- PART 6: ABSOLUTE COORDINATE ENTRIES LOCK MATRIX (THINNED SPACING CONFIG)
+-- PART 6: ABSOLUTE COORDINATE ENTRIES LOCK MATRIX
 -- ============================================================================
 local _, lockBtn, lockEmu = shared.createAbsolutePositionedButton("LockToggle", "CORE LOCK: OFF", 10, true, hudBackground, "locked", "CORE LOCK")
 lockBtn.Size = UDim2.new(0.78, 0, 0, 32)
@@ -446,9 +435,8 @@ switchBtn.Size = UDim2.new(0.78, 0, 0, 24); shared.switchButton = switchBtn
 local keyBox2 = switchBtn.Parent:FindFirstChild("KeybindBox") if keyBox2 then keyBox2.Size = UDim2.new(0.18, 0, 0, 24) end
 local _, extendBtn = shared.createAbsolutePositionedButton("ExtendToggle", "[ + ]", 6, false, mainFrame, nil)
 extendBtn.Parent.Position = UDim2.new(0, -38, 0, 6); extendBtn.Size = UDim2.new(0, 32, 0, 32); shared.extendButton = extendBtn
--- LONGER DRAG BAR EXTENSION CHANNEL: Scaled from original 0.91 width to match full 0.93 main container borders
 shared.dragHandleButton = Instance.new("TextButton")
-shared.dragHandleButton.Size = UDim2.new(0.93, 0, 0, 20) -- Stretched longer to span full container profile border cleanly
+shared.dragHandleButton.Size = UDim2.new(0.93, 0, 0, 20)
 shared.dragHandleButton.Position = UDim2.new(0.035, 0, 0, 78)
 shared.dragHandleButton.BackgroundColor3 = Color3.fromRGB(20, 20, 32)
 shared.dragHandleButton.Text = ":: HOLD TO DRAG HUD SYSTEM ::"
@@ -459,7 +447,6 @@ shared.dragHandleButton.ZIndex = 5
 shared.dragHandleButton.Parent = hudBackground
 Instance.new("UICorner", shared.dragHandleButton).CornerRadius = UDim.new(0, 4)
 local stroke8 = Instance.new("UIStroke"); stroke8.Thickness = 1.5; stroke8.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; stroke8.ZIndex = 5; stroke8.Parent = shared.dragHandleButton; table.insert(shared.allStrokes, stroke8)
--- EXTRAS PANEL RE-SPACED ENTITIES: (Compact Y coordinate tracking from 6px down to 214px)
 local _, modeBtn, modeEmu = shared.createAbsolutePositionedButton("ModeToggle", "MODE: PLAYERS", 6, true, extrasScrollPanel, nil)
 local _, crosshairBtn, crosshairEmu = shared.createAbsolutePositionedButton("CrosshairToggle", "CROSSHAIR: ON", 25, true, extrasScrollPanel, "crosshairEnabled", "CROSSHAIR")
 local _, fovBtn, fovEmu = shared.createAbsolutePositionedButton("FovToggle", "FOV: ON", 44, true, extrasScrollPanel, "fovEnabled", "FOV")
@@ -472,7 +459,6 @@ local _, friendCheckBtn, friendCheckEmu = shared.createAbsolutePositionedButton(
 local _, hitboxToggleBtn, hitboxToggleEmu = shared.createAbsolutePositionedButton("HitboxToggle", "EXPAND HITBOX: OFF", 177, true, extrasScrollPanel, "hitboxExpanded", "EXPAND HITBOX")
 local _, modifierBtn, modifierEmu = shared.createAbsolutePositionedButton("ModifierToggle", "STAT CHANGER: OFF", 196, true, extrasScrollPanel, "modifiersActive", "STAT CHANGER")
 local _, modalityBtn, modalityEmu = shared.createAbsolutePositionedButton("ModalityToggle", "SNAP DIR: BOTH ACTIVE", 215, true, extrasScrollPanel, nil)
--- THINNER SLIDER FRAMES LAYER: (Height parameter shrunk from 28 to 22, Y coordinates step compactly)
 local function buildSliderAbsoluteFramework(name, text, min, max, current, yOffset)
 local container = Instance.new("Frame"); container.Name = name; container.Size = UDim2.new(0.92, 0, 0, 22); container.Position = UDim2.new(0.04, 0, 0, yOffset); container.BackgroundColor3 = Color3.fromRGB(12, 12, 20); container.BackgroundTransparency = 0.15; container.ZIndex = 1; container.Parent = extrasScrollPanel
 local sCorner = Instance.new("UICorner"); sCorner.CornerRadius = UDim.new(0, 4); sCorner.Parent = container
@@ -502,7 +488,6 @@ buildSliderAbsoluteFramework("FovSlider", "FOV RADIUS", shared.MIN_FOV_LIMIT, sh
 buildSliderAbsoluteFramework("HitboxSlider", "HITBOX SCALE", shared.MIN_HITBOX_LIMIT, shared.MAX_HITBOX_LIMIT, shared.hitboxSizeValue, 318)
 buildSliderAbsoluteFramework("SpeedSlider", "WALK SPEED", 16, shared.MAX_WALKSPEED_LIMIT, shared.walkSpeedValue, 344)
 buildSliderAbsoluteFramework("JumpSlider", "JUMP POWER", 50, shared.MAX_JUMPPOWER_LIMIT, shared.jumpPowerValue, 370)
--- Reticle HUD Assembly
 local centerCrosshairContainer = Instance.new("Frame"); centerCrosshairContainer.Name = "CenterCrosshairContainer"; centerCrosshairContainer.Size = UDim2.new(0, 60, 0, 60); centerCrosshairContainer.AnchorPoint = Vector2.new(0.5, 0.5); centerCrosshairContainer.BackgroundTransparency = 1; centerCrosshairContainer.Visible = shared.crosshairEnabled; centerCrosshairContainer.Parent = screenGui
 local crosshairCircle = Instance.new("Frame"); crosshairCircle.Size = UDim2.new(0, 10, 0, 10); crosshairCircle.Position = UDim2.new(0.5, 0, 0.5, 0); crosshairCircle.AnchorPoint = Vector2.new(0.5, 0.5); crosshairCircle.BackgroundTransparency = 1; crosshairCircle.Parent = centerCrosshairContainer
 Instance.new("UICorner", crosshairCircle)
@@ -514,7 +499,6 @@ createSegment("R", UDim2.new(0, 10, 0, 2), UDim2.new(0.5, 13, 0.5, 0))
 createSegment("T", UDim2.new(0, 2, 0, 10), UDim2.new(0.5, 0, 0.5, -13))
 createSegment("B", UDim2.new(0, 2, 0, 10), UDim2.new(0.5, 0, 0.5, 13))
 shared.CROSSHAIR_SPIN_SPEED = 90.00
--- True Circular Vector FOV Overlay Shape
 shared.fovCircle = Instance.new("Frame")
 shared.fovCircle.Size = UDim2.new(0, shared.FOV_RADIUS * 2, 0, shared.FOV_RADIUS * 2)
 shared.fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -533,22 +517,16 @@ shared.dragHandleButton.InputBegan:Connect(function(i) if i.UserInputType == Enu
 UserInputService.InputChanged:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then dragInput = i end end)
 RunService.RenderStepped:Connect(function() if dragging and dragInput then local d = dragInput.Position - dragStart; mainFrame.Position = UDim2.new(sPos.X.Scale, sPos.X.Offset + d.X, sPos.Y.Scale, sPos.Y.Offset + d.Y) end end)
 -- ============================================================================
--- PART 7: RUNTIME SIMULATION LOOPS & TRUE TOGGLE TEXT COMPILING
+-- PART 7: RUNTIME SIMULATION LOOPS
 -- ============================================================================
 RunService.PreSimulation:Connect(function()
 local character = localPlayer.Character
 local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-local rootPart = character and character:FindFirstChild("HumanoidRootPart")
 if humanoid and shared.modifiersActive then
 humanoid.WalkSpeed = shared.walkSpeedValue
 humanoid.UseJumpPower = true
 humanoid.JumpPower = shared.jumpPowerValue
 pcall(function() humanoid.JumpHeight = (shared.jumpPowerValue * shared.jumpPowerValue) / (2 * workspace.Gravity) end)
-end
-if rootPart and humanoid and humanoid.Health > 0 then
-local lookDirection = camera.CFrame.LookVector
-local horizontalLookVector = Vector3.new(lookDirection.X, 0, lookDirection.Z).Unit
-rootPart.CFrame = CFrame.new(rootPart.Position, rootPart.Position + horizontalLookVector)
 end
 if shared.hitboxExpanded then
 shared.refreshHitboxState()
@@ -560,31 +538,19 @@ shared.fovCircle.Size = UDim2.new(0, shared.FOV_RADIUS * 2, 0, shared.FOV_RADIUS
 centerCrosshairContainer.Position = absoluteCenter; centerCrosshairContainer.Rotation = (tick() * shared.CROSSHAIR_SPIN_SPEED) % 360
 local dynamicColor = Color3.fromHSV((tick() * shared.RAINBOW_SPEED) % 1, 0.95, 1)
 shared.hudStroke.Color = dynamicColor; shared.subStroke.Color = dynamicColor; shared.circleStroke.Color = dynamicColor
--- FIXED TRUE TEXT COMPILE ENGINE: Dynamically rewrites labels to reflect literal status variations accurately
 for _, data in ipairs(colorManagedButtons) do
 pcall(function()
 local isActiveState = shared[data.targetStateString]
--- Updates content structure text on loop instead of locking static "OFF" strings
 data.buttonObject.Text = data.labelString .. ": " .. (isActiveState and "ON" or "OFF")
 data.buttonObject.TextColor3 = isActiveState and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(255, 60, 60)
 end)
 end
-for _, outlineStroke in ipairs(shared.allStrokes) do
-pcall(function()
-outlineStroke.Color = dynamicColor
-end)
-end
-for _, textObj in ipairs(textSyncList) do
-pcall(function()
-if textObj and textObj.Parent then
-textObj.TextColor3 = dynamicColor
-end
-end)
-end
+for _, outlineStroke in ipairs(shared.allStrokes) do pcall(function() outlineStroke.Color = dynamicColor end) end
+for _, textObj in ipairs(textSyncList) do pcall(function() if textObj and textObj.Parent then textObj.TextColor3 = dynamicColor end end) end
 shared.updateEspSectors()
 for _, segment in ipairs(shared.crosshairLines) do pcall(function() segment.BackgroundColor3 = dynamicColor end) end
 end)
-RunService.Stepped:Connect(function()
+RunService.PreSimulation:Connect(function()
 if shared.hitboxExpanded then
 for part, _ in pairs(shared.originalHitboxData) do
 if part and part.Parent and part.Parent:FindFirstChildOfClass("Humanoid") and part.Parent:FindFirstChildOfClass("Humanoid").Health > 0 then part.CanCollide = false end
@@ -606,11 +572,15 @@ local t = shared.getClosestTarget(); if t then shared.target = t; shared.locked 
 end
 end
 end)
--- PANEL TOGGLE TRANSITION MATRICES
 local tweenInfo = TweenInfo.new(0.40, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out)
+-- UPDATED: Manual toggle now ignores FOV limits to guarantee target acquisition
 local function coreLockToggleMacro()
-if shared.locked then shared.locked = false; shared.target = nil; shared.autolockCooldownActive = true; task.delay(shared.COOLDOWN_DURATION, function() shared.autolockCooldownActive = false end)
-else local acq = shared.getClosestTarget(); if acq then shared.target = acq; shared.locked = true end end
+if shared.locked then
+shared.locked = false; shared.target = nil; shared.autolockCooldownActive = true; task.delay(shared.COOLDOWN_DURATION, function() shared.autolockCooldownActive = false end)
+else
+local acq = shared.getClosestTarget(true) -- Pass true to ignore FOV radius check on manual click
+if acq then shared.target = acq; shared.locked = true end
+end
 end
 linkInputTouch(lockBtn, coreLockToggleMacro); lockEmu.Event:Connect(coreLockToggleMacro)
 local function coreLimbCycleMacro()
@@ -653,4 +623,4 @@ modifierEmu.Event:Connect(function() shared.modifiersActive = not shared.modifie
 linkInputTouch(modalityBtn, function() shared.lockModalityIndex = (shared.lockModalityIndex % #shared.lockModalityList) + 1; shared.lockModalityMode = shared.lockModalityList[shared.lockModalityIndex]; modalityBtn.Text = "SNAP DIR: " .. shared.lockModalityMode end)
 modalityEmu.Event:Connect(function() shared.lockModalityIndex = (shared.lockModalityIndex % #shared.lockModalityList) + 1; shared.lockModalityMode = shared.lockModalityList[shared.lockModalityIndex]; modalityBtn.Text = "SNAP DIR: " .. shared.lockModalityMode end)
 task.spawn(function() while task.wait(0.5) do if localPlayer.Character then shared.wallCheckParams.FilterDescendantsInstances = {localPlayer.Character, camera} end end end)
-print("[Master Core] Toggle Text Fixed. Compact Rows Running.")
+print("[Master Core] Camlock manual toggle fixed with FOV bypass.")
