@@ -281,6 +281,8 @@ function shared.clearTargetEsp()
 end
 
 local function getEquippedWeapon(char)
+Use code with caution.
+
 if char then
 local tool = char:FindFirstChildOfClass("Tool")
 if tool then
@@ -573,12 +575,11 @@ end
 end
 end)
 local tweenInfo = TweenInfo.new(0.40, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out)
--- UPDATED: Manual toggle now ignores FOV limits to guarantee target acquisition
 local function coreLockToggleMacro()
 if shared.locked then
 shared.locked = false; shared.target = nil; shared.autolockCooldownActive = true; task.delay(shared.COOLDOWN_DURATION, function() shared.autolockCooldownActive = false end)
 else
-local acq = shared.getClosestTarget(true) -- Pass true to ignore FOV radius check on manual click
+local acq = shared.getClosestTarget(true)
 if acq then shared.target = acq; shared.locked = true end
 end
 end
@@ -623,4 +624,27 @@ modifierEmu.Event:Connect(function() shared.modifiersActive = not shared.modifie
 linkInputTouch(modalityBtn, function() shared.lockModalityIndex = (shared.lockModalityIndex % #shared.lockModalityList) + 1; shared.lockModalityMode = shared.lockModalityList[shared.lockModalityIndex]; modalityBtn.Text = "SNAP DIR: " .. shared.lockModalityMode end)
 modalityEmu.Event:Connect(function() shared.lockModalityIndex = (shared.lockModalityIndex % #shared.lockModalityList) + 1; shared.lockModalityMode = shared.lockModalityList[shared.lockModalityIndex]; modalityBtn.Text = "SNAP DIR: " .. shared.lockModalityMode end)
 task.spawn(function() while task.wait(0.5) do if localPlayer.Character then shared.wallCheckParams.FilterDescendantsInstances = {localPlayer.Character, camera} end end end)
-print("[Master Core] Camlock manual toggle fixed with FOV bypass.")
+-- ============================================================================
+-- ADDED: GLOBAL INPUT KEYBIND PROCESSING HOOK
+-- ============================================================================
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+if gameProcessed then return end
+if input.UserInputType == Enum.UserInputType.Keyboard then
+for buttonName, assignedKeyCode in pairs(customKeybindRegistry) do
+if input.KeyCode == assignedKeyCode then
+local targetContainer = hudBackground:FindFirstChild(buttonName .. "_Container") or extrasScrollPanel:FindFirstChild(buttonName .. "_Container")
+if targetContainer then
+local actualButton = targetContainer:FindFirstChild(buttonName)
+if actualButton then
+local emuSignal = actualButton:FindFirstChild("TextButtonEventEmulationSignal")
+if emuSignal and emuSignal:IsA("BindableEvent") then
+emuSignal:Fire()
+end
+end
+end
+end
+end
+end
+end)
+print("[Master Core] Camlock manual toggle fixed with FOV bypass and Working Keybind listener.")
+
