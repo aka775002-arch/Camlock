@@ -3,11 +3,15 @@
 -- ============================================================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local ContextActionService = game:GetService("ContextActionService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 
 local localPlayer = Players.LocalPlayer
 local camera = workspace.CurrentCamera
+
+-- UNIVERSAL KEYBIND STATE
+shared.LOCK_KEYBIND = Enum.KeyCode.Q -- Default keybind configuration
 
 shared.RAINBOW_SPEED = 0.20 
 shared.FOV_RADIUS = 120 
@@ -24,7 +28,7 @@ shared.MAX_PREDICTION_LIMIT = 10.00
 -- Hitbox System Configurations
 shared.hitboxExpanded = false
 shared.hitboxSizeValue = 10.0
-shared.MAX_HITBOX_LIMIT = 30.0
+shared.MAX_HITBOX_LIMIT = 150.0 
 shared.MIN_HITBOX_LIMIT = 2.0
 shared.originalHitboxData = {} 
 
@@ -207,10 +211,14 @@ print("[Part 2/8] Focus Target System Stacked.")
 -- ============================================================================
 -- PART 3: HORIZONTAL TELEMETRY ESP SECTOR DRAWING ENGINE
 -- ============================================================================
-local CoreGui = game:GetService("CoreGui")
+local EspParent = game:GetService("CoreGui")
+local success, _ = pcall(function() local frame = Instance.new("Frame") frame.Parent = EspParent frame:Destroy() end)
+if not success then
+    EspParent = localPlayer:WaitForChild("PlayerGui")
+end
 
 function shared.clearTargetEsp()
-	for _, c in pairs(CoreGui:GetChildren()) do
+	for _, c in pairs(EspParent:GetChildren()) do
 		if string.sub(c.Name, -4) == "_ESP" then
 			c:Destroy()
 		end
@@ -218,9 +226,7 @@ function shared.clearTargetEsp()
 	table.clear(shared.activeEspStorage)
 end
 
--- Telemetry parser to actively check character structures for inventory weapons
-local function getEquippedWeapon(plr)
-	local char = plr.Character
+local function getEquippedWeapon(char)
 	if char then
 		local tool = char:FindFirstChildOfClass("Tool")
 		if tool then
@@ -230,17 +236,21 @@ local function getEquippedWeapon(plr)
 	return "UNARMED"
 end
 
-function shared.makeEsp(plr)
-	if not plr or plr == localPlayer or not plr.Character then return end
-	local char = plr.Character
-	local identifier = plr.Name .. "_ESP"
+function shared.makeEsp(entity, isNpc)
+	if not entity then return end
+	local char = isNpc and entity or entity.Character
+	if not char or char == localPlayer.Character then return end
 	
-	local existing = CoreGui:FindFirstChild(identifier)
+	-- FIXED: Changed entity:GetHash() to entity:GetDebugId() for standard instance identification
+	local cleanId = isNpc and entity:GetDebugId() or entity.Name
+	local identifier = cleanId .. "_ESP"
+	
+	local existing = EspParent:FindFirstChild(identifier)
 	if existing then existing:Destroy() end
 	
 	local ESPholder = Instance.new("Folder")
 	ESPholder.Name = identifier
-	ESPholder.Parent = CoreGui
+	ESPholder.Parent = EspParent
 	
 	local characterHighlight = Instance.new("Highlight")
 	characterHighlight.Name = "EspOutline"
@@ -271,26 +281,28 @@ function shared.makeEsp(plr)
 		local TextLabel = Instance.new("TextLabel")
 		BillboardGui.Adornee = head
 		BillboardGui.Name = "EspBillboard"
-		BillboardGui.Parent = ESPholder
-		BillboardGui.Size = UDim2.new(0, 150, 0, 150)
-		BillboardGui.StudsOffset = Vector3.new(0, 1.5, 0)
-		BillboardGui.AlwaysOnTop = true
-		
-		TextLabel.Parent = BillboardGui
-		TextLabel.BackgroundTransparency = 1
-		TextLabel.Position = UDim2.new(0, -25, 0, -50)
-		TextLabel.Size = UDim2.new(0, 200, 0, 100)
-		TextLabel.Font = Enum.Font.SourceSansSemibold
-		TextLabel.TextSize = 16
-		TextLabel.TextStrokeTransparency = 0
+
+BillboardGui.Parent = ESPholder
+BillboardGui.Size = UDim2.new(0, 150, 0, 150)
+BillboardGui.StudsOffset = Vector3.new(0, 1.5, 0)
+BillboardGui.AlwaysOnTop = true
+TextLabel.Parent = BillboardGui
+TextLabel.BackgroundTransparency = 1
+TextLabel.Position = UDim2.new(0, -25, 0, -50)
+TextLabel.Size = UDim2.new(0, 200, 0, 100)
+TextLabel.Font = Enum.Font.SourceSansSemibold
+TextLabel.TextSize = 16
+TextLabel.TextStrokeTransparency = 0
 TextLabel.TextYAlignment = Enum.TextYAlignment.Bottom
 TextLabel.ZIndex = 10
-shared.activeEspStorage[plr] = {
+shared.activeEspStorage[identifier] = {
 folder = ESPholder,
 label = TextLabel,
 highlight = characterHighlight,
 boxes = adornments,
-characterLink = char
+characterLink = char,
+isNpc = isNpc,
+assignedEntity = entity
 }
 end
 end
@@ -299,31 +311,50 @@ if not shared.espMasterEnabled then
 shared.clearTargetEsp()
 return
 end
+if shared.targetMode == "Players" or shared.targetMode == "All" then
 for _, p in ipairs(Players:GetPlayers()) do
 if p ~= localPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChildOfClass("Humanoid") then
-if not shared.activeEspStorage[p] or shared.activeEspStorage[p].characterLink ~= p.Character then
-shared.makeEsp(p)
+local id = p.Name .. "_ESP"
+if not shared.activeEspStorage[id] or shared.activeEspStorage[id].characterLink ~= p.Character then
+shared.makeEsp(p, false)
+end
+end
+end
+end
+if shared.targetMode == "NPCs" or shared.targetMode == "All" then
+for _, d in ipairs(workspace:GetDescendants()) do
+if d:IsA("Model") and d:FindFirstChildOfClass("Humanoid") and d ~= localPlayer.Character and not Players:GetPlayerFromCharacter(d) then
+if d:FindFirstChild("HumanoidRootPart") and d:FindFirstChild("Head") then
+local id = d:GetDebugId() .. "_ESP"
+if not shared.activeEspStorage[id] or shared.activeEspStorage[id].characterLink ~= d then
+shared.makeEsp(d, true)
+end
+end
 end
 end
 end
 local localRoot = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
 local currentRainbowColor = Color3.fromHSV((tick() * shared.RAINBOW_SPEED) % 1, 0.95, 1)
-for plr, data in pairs(shared.activeEspStorage) do
+for id, data in pairs(shared.activeEspStorage) do
 local char = data.characterLink
 local folder = data.folder
 if not char.Parent or not folder.Parent then
 if folder then folder:Destroy() end
-shared.activeEspStorage[plr] = nil
+shared.activeEspStorage[id] = nil
 continue
 end
 local hum = char:FindFirstChildOfClass("Humanoid")
 local root = char:FindFirstChild("HumanoidRootPart")
 if hum and root and localRoot and hum.Health > 0 then
 local distance = math.floor((localRoot.Position - root.Position).Magnitude)
-local currentWeapon = getEquippedWeapon(plr)
--- Multi-line formatting processing tool items stacked above target configurations
-data.label.Text = string.format("[%s]\nName: %s | HP: %s | Studs: %d", currentWeapon, plr.Name, string.format("%.1f", hum.Health), distance)
+local currentWeapon = getEquippedWeapon(char)
 local assignedColor = Color3.fromRGB(255, 60, 60)
+if data.isNpc then
+data.label.Text = string.format("[%s]\nNPC: %s | HP: %s | Studs: %d", currentWeapon, char.Name, string.format("%.1f", hum.Health), distance)
+assignedColor = Color3.fromRGB(255, 255, 0) -- Neon Yellow outline configuration for highlighted NPCs
+else
+local plr = data.assignedEntity
+data.label.Text = string.format("[%s]\nName: %s | HP: %s | Studs: %d", currentWeapon, plr.Name, string.format("%.1f", hum.Health), distance)
 local isTeammate = localPlayer.Team and plr.Team and (localPlayer.Team == plr.Team)
 local isFriend = localPlayer:IsFriendsWith(plr.UserId)
 if isTeammate then
@@ -332,6 +363,7 @@ elseif isFriend then
 assignedColor = Color3.fromRGB(60, 255, 60)
 elseif shared.wallEspEnabled and shared.isWallBetween(root) then
 assignedColor = Color3.fromRGB(0, 120, 255)
+end
 end
 if data.highlight then
 data.highlight.OutlineColor = assignedColor
@@ -345,7 +377,7 @@ end
 end
 else
 if folder then folder:Destroy() end
-shared.activeEspStorage[plr] = nil
+shared.activeEspStorage[id] = nil
 end
 end
 end
@@ -356,7 +388,7 @@ print("[Part 3/8] Telemetry Filtering Engines Active.")
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "QuantumCamlockGui"; screenGui.ResetOnSpawn = false; screenGui.IgnoreGuiInset = true; screenGui.Parent = localPlayer:WaitForChild("PlayerGui")
 local mainFrame = Instance.new("Frame")
-mainFrame.Name = "MainAnchor"; mainFrame.Size = UDim2.new(0, 195, 0, 165); mainFrame.Position = UDim2.new(0.85, -97, 0.45, -82); mainFrame.BackgroundTransparency = 1; mainFrame.Parent = screenGui
+mainFrame.Name = "MainAnchor"; mainFrame.Size = UDim2.new(0, 195, 0, 190); mainFrame.Position = UDim2.new(0.85, -97, 0.45, -82); mainFrame.BackgroundTransparency = 1; mainFrame.Parent = screenGui
 local hudBackground = Instance.new("Frame")
 hudBackground.Name = "HUDBackdrop"; hudBackground.Size = UDim2.new(1, 0, 1, 0); hudBackground.BackgroundColor3 = Color3.fromRGB(4, 4, 8); hudBackground.BackgroundTransparency = 0.25; hudBackground.Parent = mainFrame
 table.insert(shared.themeBackgrounds, hudBackground)
@@ -380,6 +412,25 @@ print("[Part 4/8] Rounded HUD Elements Operational.")
 local mainFrame = shared.mainFrame; local hudBackground = shared.hudBackground; local screenGui = shared.screenGui
 shared.textButton = shared.createTacticalButton("LockToggle", "CORE LOCK: OFF", UDim2.new(0.92, 0, 0, 42)); shared.textButton.TextColor3 = Color3.fromRGB(255, 60, 60); shared.textButton.Parent = hudBackground
 shared.switchButton = shared.createTacticalButton("PartSwitch", "AIM MOD: HEAD", UDim2.new(0.92, 0, 0, 32)); shared.switchButton.Parent = hudBackground
+-- KEYBIND MODIFIER TEXT BOX INTERFACE ADDITION
+local keybindBox = Instance.new("TextBox")
+keybindBox.Name = "KeybindSetter"
+keybindBox.Size = UDim2.new(0.92, 0, 0, 24)
+keybindBox.BackgroundColor3 = Color3.fromRGB(16, 16, 26)
+keybindBox.BackgroundTransparency = 0.2
+keybindBox.Text = "BIND: " .. tostring(shared.LOCK_KEYBIND.Name)
+keybindBox.TextColor3 = Color3.fromRGB(200, 200, 255)
+keybindBox.Font = Enum.Font.GothamBold
+keybindBox.TextSize = 10
+local kbCorner = Instance.new("UICorner"); kbCorner.CornerRadius = UDim.new(0, 5); kbCorner.Parent = keybindBox
+local kbStroke = Instance.new("UIStroke"); kbStroke.Thickness = 1; kbStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; kbStroke.Parent = keybindBox; table.insert(shared.allStrokes, kbStroke)
+keybindBox.Parent = hudBackground
+keybindBox.Focused:Connect(function()
+keybindBox.Text = "PRESS ANY KEY..."
+end)
+keybindBox.FocusLost:Connect(function()
+keybindBox.Text = "BIND: " .. tostring(shared.LOCK_KEYBIND.Name)
+end)
 shared.extendButton = shared.createTacticalButton("ExtendToggle", "[ + ]", UDim2.new(0, 32, 0, 32)); shared.extendButton.Position = UDim2.new(0, -38, 0.5, -16); shared.extendButton.Parent = mainFrame
 local subPanel = Instance.new("ScrollingFrame")
 subPanel.Name = "SubPanel"; subPanel.Size = UDim2.new(1.15, 0, 1.85, 0); subPanel.Position = UDim2.new(0, 0, -0.42, 0); subPanel.BackgroundColor3 = Color3.fromRGB(4, 4, 8); subPanel.BackgroundTransparency = 1; subPanel.Visible = false; subPanel.Parent = mainFrame
@@ -434,7 +485,6 @@ print("[Part 5/8] Interface Assets Anchored.")
 -- ============================================================================
 -- PART 6: SLIDER CONFIGURATIONS & INTERFACE SIZERS
 -- ============================================================================
-local UserInputService = game:GetService("UserInputService")
 local subPanel = shared.subPanel
 -- --- SLIDER 1: FOV SIZE SLIDER CONTAINER ---
 local sliderContainer = Instance.new("Frame")
@@ -541,7 +591,7 @@ print("[Part 6/8] Slider Configurator Subroutines Assembled.")
 -- ============================================================================
 local mainFrame = shared.mainFrame; local hudBackground = shared.hudBackground; local screenGui = shared.screenGui
 shared.dragHandleButton = Instance.new("TextButton")
-shared.dragHandleButton.Size = UDim2.new(0.92, 0, 0, 28); shared.dragHandleButton.BackgroundColor3 = Color3.fromRGB(20, 20, 32)
+shared.dragHandleButton.Size = UDim2.new(0.92, 0, 0, 24); shared.dragHandleButton.BackgroundColor3 = Color3.fromRGB(20, 20, 32)
 shared.dragHandleButton.Text = ":: HOLD TO DRAG HUD ::"; shared.dragHandleButton.TextColor3 = Color3.fromRGB(150, 150, 170); shared.dragHandleButton.TextSize = 9.5; shared.dragHandleButton.Font = Enum.Font.GothamBold; shared.dragHandleButton.AutoButtonColor = false; shared.dragHandleButton.Parent = hudBackground
 local dCorner = Instance.new("UICorner"); dCorner.CornerRadius = UDim.new(0, 4); dCorner.Parent = shared.dragHandleButton
 local stroke8 = Instance.new("UIStroke")
@@ -562,6 +612,47 @@ print("[Part 7/8] Physics Drag Pipelines Coupled.")
 -- ============================================================================
 local camera = workspace.CurrentCamera
 local mainFrame = shared.mainFrame; local subPanel = shared.subPanel; local centerCrosshairContainer = shared.centerCrosshairContainer; local sliderFill = shared.sliderFill; local smoothFill = shared.smoothFill; local predFill = shared.predFill; local hitboxFill = shared.hitboxFill
+-- DEDICATED TOGGLE PIPELINE FOR KEY EVENTS
+local function executeToggle()
+if shared.locked then
+shared.locked = false; shared.target = nil
+shared.textButton.Text = "CORE LOCK: OFF"; shared.textButton.TextColor3 = Color3.fromRGB(255, 60, 60)
+shared.clearTargetEsp()
+shared.autolockCooldownActive = true
+task.delay(shared.COOLDOWN_DURATION, function()
+shared.autolockCooldownActive = false
+end)
+else
+local acquired = shared.getClosestTarget()
+if acquired then
+shared.target = acquired; shared.locked = true
+shared.textButton.Text = "CORE LOCK: ACTIVE"; shared.textButton.TextColor3 = Color3.fromRGB(0, 255, 150)
+end
+end
+end
+-- UNIVERSAL MOBILE/PC BIND VIA CONTEXTACTIONSERVICE
+local function handleAction(actionName, inputState, inputObj)
+if inputState == Enum.UserInputState.Begin then
+executeToggle()
+end
+return Enum.ContextActionResult.Pass
+end
+local function rebindLockAction()
+ContextActionService:UnbindAction("UniversalCamlockToggle")
+ContextActionService:BindAction("UniversalCamlockToggle", handleAction, false, shared.LOCK_KEYBIND)
+end
+rebindLockAction()
+-- TEXTBOX MODIFIER LOGIC CALLS REBIND ENGINE
+UserInputService.InputBegan:Connect(function(input, gpe)
+if keybindBox:IsFocused() then
+if input.KeyCode ~= Enum.KeyCode.Unknown and input.KeyCode ~= Enum.KeyCode.Escape then
+shared.LOCK_KEYBIND = input.KeyCode
+keybindBox:ReleaseFocus()
+keybindBox.Text = "BIND: " .. tostring(shared.LOCK_KEYBIND.Name)
+rebindLockAction()
+end
+end
+end)
 RunService.RenderStepped:Connect(function()
 local absoluteCenter = UDim2.new(0, camera.ViewportSize.X / 2, 0, camera.ViewportSize.Y / 2)
 shared.fovCircle.Size = UDim2.new(0, shared.FOV_RADIUS * 2, 0, shared.FOV_RADIUS * 2); shared.fovCircle.Position = absoluteCenter
@@ -643,23 +734,7 @@ TweenService:Create(subPanel, TweenInfo.new(0.30, Enum.EasingStyle.Cubic, Enum.E
 TweenService:Create(shared.extendButton, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0.15, TextTransparency = 0}):Play()
 task.delay(0.3, function() if not shared.menuExpanded then subPanel.Visible = false; shared.closeExtrasButton.Visible = false end end)
 end)
-shared.textButton.Activated:Connect(function()
-if shared.locked then
-shared.locked = false; shared.target = nil
-shared.textButton.Text = "CORE LOCK: OFF"; shared.textButton.TextColor3 = Color3.fromRGB(255, 60, 60)
-shared.clearTargetEsp()
-shared.autolockCooldownActive = true
-task.delay(shared.COOLDOWN_DURATION, function()
-shared.autolockCooldownActive = false
-end)
-else
-local acquired = shared.getClosestTarget()
-if acquired then
-shared.target = acquired; shared.locked = true
-shared.textButton.Text = "CORE LOCK: ACTIVE"; shared.textButton.TextColor3 = Color3.fromRGB(0, 255, 150)
-end
-end
-end)
+shared.textButton.Activated:Connect(executeToggle)
 shared.switchButton.Activated:Connect(function()
 shared.targetPartIndex = (shared.targetPartIndex % #shared.targetPartList) + 1
 local currentBone = shared.targetPartList[shared.targetPartIndex]
@@ -728,7 +803,6 @@ shared.hitboxToggleButton.Text = shared.hitboxExpanded and "EXPAND HITBOX: ON" o
 shared.hitboxToggleButton.TextColor3 = shared.hitboxExpanded and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(245, 245, 255)
 shared.refreshHitboxState()
 end)
--- Safe standalone isolation thread loop processing player filter updates smoothly
 task.spawn(function()
 while task.wait(0.5) do
 local localChar = localPlayer.Character
@@ -750,4 +824,3 @@ end
 end
 end)
 print("[Part 8/8] Master Environment Kernels Booted and Synchronized Successfully.")
-
